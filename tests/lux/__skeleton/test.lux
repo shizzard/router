@@ -1,0 +1,21 @@
+[doc]
+One-line test summary
+
+More details
+Even more details
+[enddoc]
+
+# Remove this line to disable test skip
+[config skip_unless=LUX_SKELETON_SKIP]
+
+[include ../../__common/common.luxinc]
+
+[global string=hello]
+
+[shell test]
+  [progress (running echo test)]
+  !echo ${string}
+  ??${string}
+  [invoke check-ok]
+
+[cleanup]

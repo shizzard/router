@@ -1,0 +1,8 @@
+{application, 'router', [
+  {description, "gRPC microservices router application"},
+  {vsn, "0.1.0"},
+  {registered, []},
+  {mod, {'router_app', []}},
+  {applications, [kernel, stdlib, router_log]},
+  {env,[]}
+]}.

@@ -1,0 +1,7 @@
+{application, 'router_cli', [
+    {description, "CLI interface for router"},
+    {vsn, "0.1.0"},
+    {registered, []},
+    {applications, [kernel, stdlib, getopt]},
+    {env,[]}
+]}.

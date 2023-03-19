@@ -1,0 +1,10 @@
+.DS_Store
+_build
+_logs
+_tools
+.vscode
+.envrc
+erl_crash.dump
+*.beam
+.plt
+

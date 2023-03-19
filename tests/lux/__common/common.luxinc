@@ -1,0 +1,68 @@
+[global fail-pattern=[Ee][Rr][Rr][Oo][Rr]]
+[global erl-prompt=(\d+)>]
+[global sh-prompt=SH-PROMPT:]
+
+[macro random-integer min max]
+  !awk -v min=$min -v max=$max 'BEGIN{srand(); print int(min+rand()*(max-min+1))}'
+  ?^(\d+)$
+  [local rand=$1]
+  [invoke check-ok]
+[endmacro]
+
+[macro check-ok]
+  !echo ==$$?==
+  ?==0==
+  ?${sh-prompt}
+[endmacro]
+
+[macro app-start]
+  !cd $$ROUTER_DIR_ROOT
+  ?${sh-prompt}
+  [progress (starting application)]
+  !$$RELEASE_TEST_BIN console
+  -${fail-pattern}
+  ?${erl-prompt}
+  [progress (application started)]
+[endmacro]
+
+[macro app-stop]
+  [progress (stopping application)]
+  !erlang:halt().
+  [progress (application stopped)]
+  [invoke check-ok]
+[endmacro]
+
+[macro log-tail level]
+  !tail -F ${ROUTER_DIR_LOGS}/lgr_${level}.log.1
+[endmacro]
+
+[macro read-file file]
+  [progress (reading ${file})]
+  !cat ${file}
+  ?^({.*})$
+  [local out=$1]
+[endmacro]
+
+[macro metric-check-filtered metric-name metric-filter metric-match]
+  [progress (checking metric: ${metric-name})]
+  !curl -s http://localhost:${ROUTER_APP_HTTP_API_PORT}/metrics | grep ${metric-name} | grep ${metric-filter}
+  ?${metric-filter}
+  ?^(.*)${metric-name}(.*)${metric-filter}(.*)${metric-match}$
+  [invoke check-ok]
+[endmacro]
+
+[macro metric-check metric-name metric-match]
+  [progress (checking metric: ${metric-name})]
+  !curl -s http://localhost:${ROUTER_APP_HTTP_API_PORT}/metrics | grep ${metric-name}
+  ?${metric-name}
+  ?^(.*)${metric-name}(.*)${metric-match}$
+  [invoke check-ok]
+[endmacro]
+
+[macro lag-queue-stats-check field-filter field-match]
+  [progress (checking lag queue: ${field-filter})]
+  !${RELEASE_TEST_BIN_CLI} lag-queue -s | grep ${field-filter}
+  ?${field-filter}
+  ?^(.*)${field-filter}(.*)${field-match}$
+  [invoke check-ok]
+[endmacro]
