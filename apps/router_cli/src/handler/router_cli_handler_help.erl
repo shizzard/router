@@ -1,5 +1,7 @@
 -module('router_cli_handler_help').
 -behavior('router_cli_handler').
+-dialyzer({nowarn_function, [config/0, dispatch/2]}).
+
 -include("router_cli.hrl").
 -include("router_cli_getopt.hrl").
 -include("router_cli_handler.hrl").

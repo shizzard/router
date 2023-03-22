@@ -1,6 +1,7 @@
--module('router_sup').
+-module('router_grpc_sup').
 -behaviour(supervisor).
 
+-include_lib("router_log/include/router_log.hrl").
 -include_lib("typr/include/typr_specs_supervisor.hrl").
 
 -export([start_link/0, init/1]).
@@ -23,25 +24,44 @@ start_link() ->
 
 
 init([]) ->
-  router_log:component(router),
-
-  {ok, BucketsPO2} = router_config:get(router, [hashring, buckets_po2]),
-  {ok, NodesPO2} = router_config:get(router, [hashring, nodes_po2]),
+  router_log:component(router_grpc),
 
   ok = init_prometheus_metrics(),
+  {ok, Port} = router_config:get(router_grpc, [listener, port]),
+  ok = start_cowboy(Port),
+  ?l_info(#{text => "gRPC listener started", what => init, result => ok, details => #{port => Port}}),
+
   SupFlags = #{strategy => one_for_one, intensity => 10, period => 10},
-  Children = [#{
-    id => router_hashring_sup,
-    start => {router_hashring_sup, start_link, [{BucketsPO2, NodesPO2}]},
-    restart => permanent,
-    shutdown => infinity,
-    type => supervisor
-  }],
+  Children = [
+    #{
+      id => router_grpc_registry,
+      start => {router_grpc_registry, start_link, [
+        [test_definitions],
+        #{'grpc.testing.TestService' => router_grpc_h_test}
+      ]},
+      restart => permanent,
+      shutdown => 5000,
+      type => worker
+    }
+    % ranch_server_child_spec()
+  ],
   {ok, {SupFlags, Children}}.
 
 
 
 %% Internals
+
+
+
+start_cowboy(Port) ->
+  {ok, _} = cowboy:start_clear(router_grpc_listener,
+    [{port, Port}],
+    #{
+      env => #{dispatch => cowboy_router:compile([])},
+      stream_handlers => [router_grpc_h]
+    }
+  ),
+  ok.
 
 
 

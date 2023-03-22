@@ -1,0 +1,7 @@
+{application, 'router_pb', [
+  {description, "Router protobuf source and generated files"},
+  {vsn, "0.1.0"},
+  {registered, []},
+  {applications, [kernel, stdlib, grpcbox]},
+  {env,[]}
+]}.

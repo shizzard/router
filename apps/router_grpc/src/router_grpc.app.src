@@ -1,0 +1,8 @@
+{application, 'router_grpc', [
+  {description, "Router gRPC"},
+  {vsn, "0.1.0"},
+  {registered, []},
+  {mod, {'router_grpc_app', []}},
+  {applications, [kernel, stdlib, router_log, router, router_pb, grpcbox]},
+  {env,[]}
+]}.

@@ -50,7 +50,7 @@ RELEASE_TEST_BIN_CLI := $(ROUTER_DIR_BUILD)/test/bin/router
 RELEASE_PROD_BIN := $(ROUTER_DIR_BUILD)/prod/rel/router/bin/router
 RELEASE_PROD_BIN_CLI := $(ROUTER_DIR_BUILD)/prod/bin/router
 
-SOURCE := $(shell find apps -iname "*.erl" -or -iname "*.hrl" -or -iname "*.app.src")
+SOURCE := $(shell find apps -iname "*.erl" -or -iname "*.hrl" -or -iname "*.app.src" -or -iname "*.proto")
 CONFIG := $(ROUTER_DIR_ROOT)/rebar.config $(ROUTER_DIR_CONFIG)/sys.config $(ROUTER_DIR_CONFIG)/vm.args
 
 .PHONY: all
@@ -120,7 +120,7 @@ run: $(RELEASE_BIN)
 # Erlang test
 
 .PHONY: check
-check: dialyze unit-tests integration-tests
+check: dialyze unit-tests integration-tests lux-tests
 
 .PHONY: dialyze
 dialyze:

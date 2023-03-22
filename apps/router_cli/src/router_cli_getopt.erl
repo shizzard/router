@@ -1,4 +1,6 @@
 -module(router_cli_getopt).
+-dialyzer({nowarn_function, [actions/0, default_help/0, merged_config/1]}).
+
 -include("router_cli.hrl").
 -include("router_cli_getopt.hrl").
 
@@ -35,14 +37,18 @@ dispatch([Action | _] = Args) ->
 dispatch([]) ->
   dispatch_action("actions", []).
 
+
+
 -spec actions() ->
-  list({Action :: list, Module :: atom(), HelpString :: list()}).
+  [{Action :: list, Module :: atom(), HelpString :: list()}, ...].
 actions() ->
   [
     {"actions", router_cli_handler_actions, "List available actions"},
     {"help", router_cli_handler_help, "Print help"},
     {"proxy", router_cli_handler_proxy, "Proxy management"}
   ].
+
+
 
 -spec default_help() ->
   ok.

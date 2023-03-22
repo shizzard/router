@@ -5,6 +5,6 @@ _tools
 .vscode
 .envrc
 erl_crash.dump
+*.crashdump
 *.beam
 .plt
-
