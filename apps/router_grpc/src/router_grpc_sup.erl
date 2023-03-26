@@ -36,8 +36,8 @@ init([]) ->
     #{
       id => router_grpc_registry,
       start => {router_grpc_registry, start_link, [
-        [test_definitions],
-        #{'grpc.testing.TestService' => router_grpc_h_test}
+        [registry_definitions],
+        #{'lg.service.router.RegistryService' => router_grpc_h_registry}
       ]},
       restart => permanent,
       shutdown => 5000,

@@ -1,0 +1,111 @@
+syntax = "proto3";
+
+package lg.core.network;
+
+
+
+/*
+  Network endpoint message.
+
+  Examples:
+
+  // google.com:443
+  Endpoint {
+    host = "google.com"
+    port = 443
+  }
+*/
+message Endpoint {
+  /*
+    Both hostname and ip address allowed.
+  */
+  string host = 1;
+
+  /*
+    0..65535.
+    Any value less then 0 should be treated as invalid argument.
+    Port number 0 (default value) should be treated either as default port (if
+    any), or as an invalid argument.
+  */
+  int32 port = 2;
+}
+
+
+
+/*
+  Universal Resource Locator message.
+
+  Examples:
+
+  // pgsql://root:root@postgres.local:15432/users_db
+  URI {
+    scheme = "pgsql"
+    username = "root"
+    password = "root"
+    host = "postgres.local"
+    port = 15432
+    path_segments = ["users_db"]
+  }
+
+  // https://service.local/users/14374562/settings?filter=privacy#privacy
+  URI {
+    scheme = "https"
+    host = "service.local"
+    path_segments = ["users", "14374562", "settings"]
+    query = {"filter" => "privacy"}
+    fragment = "privacy"
+  }
+*/
+message URI {
+  /*
+    URI scheme, e.g. "http", "https", "pgsql", etc.
+    Empty scheme should be treated as invalid argument.
+  */
+  string scheme = 1;
+
+  /*
+    Empty username should be treated as no authentication URI.
+  */
+  string username = 2;
+
+  /*
+    Empty password is allowed only when username field is also empty.
+  */
+  string password = 3;
+
+  /*
+    Network endpoint, specifying host and port.
+  */
+  Endpoint endpoint = 4;
+
+  /*
+    Path segments are defined without leading or trailing slashes ('/').
+  */
+  repeated string path_segments = 5;
+
+  /*
+    Parts of query string.
+  */
+  map<string, string> query = 6;
+
+  /*
+    Fragment part of URI is defined without leading hashtag ('#').
+  */
+  string fragment = 7;
+}
+
+
+
+/*
+  Universal Resource Locator message, plaintext variation.
+
+  Examples:
+
+  // https://service.local/users/14374562/settings?filter=privacy#privacy
+  PlainURI {
+    uri = "https://service.local/users/14374562/settings?filter=privacy#privacy"
+  }
+*/
+message PlainURI {
+  string uri = 1;
+}

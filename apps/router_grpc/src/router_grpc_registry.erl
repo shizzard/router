@@ -143,19 +143,55 @@ init_ets_table_service(ServiceName, ServiceDefinition, ServiceMap, S0) ->
   case maps:get(ServiceName, ServiceMap, undefined) of
     undefined -> ok;
     ModuleName ->
-      {{service, ServiceName}, Methods} = ServiceDefinition:get_service_def(ServiceName),
-      MethodDefinitions = [
-        #router_grpc_registry_definition{
-          id = ?service_method_id(ServiceName, MethodName), definition = ServiceDefinition,
-          service = ServiceName, method = MethodName, module = ModuleName, function = atom_snake_case(MethodName),
-          input = Input, output = Output, input_stream = InputStream, output_stream = OutputStream, opts = Opts
-        } || #rpc{
-          name = MethodName, input = Input, output = Output,
-          input_stream = InputStream, output_stream = OutputStream, opts = Opts
-        } <- Methods
-      ],
-      ets:insert(S0#state.ets, MethodDefinitions)
+      {{service, ServiceName}, ServiceMethods} = ServiceDefinition:get_service_def(ServiceName),
+      init_ets_table_service_methods(ServiceName, ServiceDefinition, ServiceMethods, ModuleName, S0)
   end.
+
+
+
+init_ets_table_service_methods(ServiceName, ServiceDefinition, ServiceMethods, ModuleName, S0) ->
+  MethodDefinitions = lists:flatten([
+    begin
+      %% Check if configured module exports corresponding function with arity 2
+      FunctionName = atom_snake_case(ServiceMethodName),
+      ModuleExports = ModuleName:module_info(exports),
+      ExportedArities = proplists:get_all_values(FunctionName, ModuleExports),
+      case lists:member(2, ExportedArities) of
+        true ->
+          #router_grpc_registry_definition{
+            id = ?service_method_id(ServiceName, ServiceMethodName),
+            definition = ServiceDefinition, service = ServiceName, method = ServiceMethodName,
+            module = ModuleName, function = FunctionName, input = Input, output = Output,
+            input_stream = InputStream, output_stream = OutputStream, opts = Opts
+          };
+        false when length(ExportedArities) == 0 ->
+          ?l_warning(#{
+            text => "Handler module does not export required function",
+            what => init_ets_table, result => error, details => #{
+              function => lists:flatten(io_lib:format("~ts/~p", [FunctionName, 2]))
+            }
+          }),
+          [];
+        false ->
+          ?l_warning(#{
+            text => "Handler module exports required function with wrong arity",
+            what => init_ets_table, result => error, details => #{
+              function => lists:flatten(io_lib:format("~ts/~p", [FunctionName, 2])),
+              actual_exports => lists:flatten(lists:join(",", [
+                lists:flatten(io_lib:format("~ts/~p", [FunctionName, Arity]))
+                || Arity <- ExportedArities
+              ]))
+            }
+          }),
+          []
+      end
+    end || #rpc{
+      name = ServiceMethodName, input = Input, output = Output,
+      input_stream = InputStream, output_stream = OutputStream, opts = Opts
+    } <- ServiceMethods
+  ]),
+  ets:insert(S0#state.ets, MethodDefinitions).
+
 
 
 atom_snake_case(Name) ->
@@ -165,9 +201,9 @@ atom_snake_case(Name) ->
       re:replace(Snaking, RE, "\\1_\\2", [{return, list}, global])
     end, NameString,
     [
-      "(.)([A-Z][a-z]+)", %% uppercase followed by lowercase
-      "(.)([0-9]+)", %% any consecutive digits
-      "([a-z0-9])([A-Z])" %% uppercase with lowercase or digit before it
+      "(.)([A-Z][a-z]+)",   %% uppercase followed by lowercase
+      "(.)([0-9]+)",        %% any consecutive digits
+      "([a-z0-9])([A-Z])"   %% uppercase with lowercase or digit before it
     ]
   ),
   Snaked1 = string:replace(Snaked, ".", "_", all),

@@ -1,0 +1,129 @@
+syntax = "proto3";
+
+package lg.core.trait;
+
+
+
+/*
+  Pagination request message.
+  https://cloud.google.com/apis/design/design_patterns#list_pagination
+*/
+message PaginationRq {
+  /*
+    Page token requested.
+    Empty page_token should be should be interpreted as a request for the first
+    page.
+    The contents of the page token should be a URL-safe, base64-encoded protocol
+    buffer, which allows for content evolution without compatibility issues. The
+    server may opt for a different serialization method. The client should treat
+    the page token as an opaque string, without making assumptions about its
+    internal structure.
+    If the page token contains potentially sensitive information, that
+    information should be encrypted.
+  */
+  string page_token = 1;
+
+  /*
+    Page size requested.
+    The server may further constrain the maximum number of results returned in a
+    single page. If the page_size is 0, the server will decide the number of
+    results to be returned.
+    The client must not interpret a smaller number of received results as an
+    indication of the last page (see RaginationRs).
+  */
+  int32 page_size = 2;
+}
+
+
+
+/*
+  Pagination response message.
+  https://cloud.google.com/apis/design/design_patterns#list_pagination
+*/
+message PaginationRs {
+  /*
+    Page token to be used to request the next page.
+    If the value is empty, it means no further results for the request.
+  */
+  string next_page_token = 1;
+}
+
+
+
+/*
+  Message Identifier.
+  The message identifier is used to correlate requests and responses, such as in
+  bidirectional streams. Clients can generate any string to use as a request ID.
+  The server must respond with the same ID to maintain the correlation between
+  requests and responses.
+*/
+message Id {
+  string id = 1;
+}
+
+
+
+/*
+  The Result message represents the outcome of an operation, along with error
+  details and debugging information if the operation fails. It contains an
+  enumeration of status codes, an error message, error metadata, and debug
+  information as key-value pairs.
+  Clients must not rely on exact values of error_message and metadata fields, as
+  these values are subject to change and evolvement.
+
+*/
+message Result {
+  /*
+    Represents the various possible status codes for the operation.
+  */
+  enum Status {
+    /*
+      The operation was successful.
+    */
+    SUCCESS = 0;
+
+    /*
+      Operation failed due to invalid argument.
+      Related information might be found in the error_metadata field.
+    */
+    ERROR_INVALID_ARGUMENT = 1;
+
+    /*
+      The operation failed because the endpoint was unreachable.
+    */
+    ERROR_ENDPOINT_UNREACHABLE = 2;
+
+    /*
+      The operation failed due to an unknown virtual service. The client must
+      register the virtual service before referencing it in subsequent messages.
+    */
+    ERROR_UNKNOWN_VIRTUAL_SERVICE = 3;
+
+    /*
+      The operation failed due to the conflict.
+    */
+    ERROR_CONFLICT = 4;
+  }
+
+  /*
+    Indicates the status of the operation using the `Status` enum.
+  */
+  Status status = 1;
+
+  /*
+    Provides additional information about the error in case the operation fails.
+  */
+  string error_message = 2;
+
+  /*
+    Contains key-value pairs that provide extra metadata related to the error.
+  */
+  map<string, string> error_meta = 3;
+
+  /*
+    Contains key-value pairs that provide debugging information.
+    May be populated for successful responses to provide  additional debugging
+    information.
+  */
+  map<string, string> debug_info = 4;
+}

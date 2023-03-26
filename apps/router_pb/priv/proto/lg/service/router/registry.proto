@@ -1,0 +1,488 @@
+syntax = "proto3";
+
+package lg.service.router;
+
+import "lg/core/grpc.proto";
+import "lg/core/trait.proto";
+
+
+
+/*
+  Request for registering a virtual service.
+*/
+message RegisterVirtualServiceRq {
+  /*
+    Virtual service to be registered.
+  */
+  lg.core.grpc.VirtualService virtual_service = 1;
+}
+
+
+
+/*
+  Response for virtual service registration.
+*/
+message RegisterVirtualServiceRs {}
+
+
+
+/*
+  Request for unregistering a virtual service.
+*/
+message UnregisterVirtualServiceRq {
+  /*
+    The server will only consider the following fields from the VirtualService
+    message: virtual_service.package, virtual_service.name, and endpoint.
+  */
+  lg.core.grpc.VirtualService virtual_service = 1;
+}
+
+
+
+/*
+  Response for unregistering a virtual service.
+*/
+message UnregisterVirtualServiceRs {}
+
+
+
+/*
+  Request for putting a virtual server instance to maintenance mode.
+*/
+message EnableVirtualServiceMaintenanceRq {
+  /*
+    The server will only consider the following fields from the VirtualService
+    message: virtual_service.package, virtual_service.name, and endpoint.
+  */
+  lg.core.grpc.VirtualService virtual_service = 1;
+}
+
+
+
+/*
+  Response for putting a virtual server instance to maintenance mode.
+*/
+message EnableVirtualServiceMaintenanceRs {}
+
+
+
+/*
+  Request for taking a virtual server instance out of maintenance mode.
+*/
+message DisableVirtualServiceMaintenanceRq {
+  /*
+    The server will only consider the following fields from the VirtualService
+    message: virtual_service.package, virtual_service.name, and endpoint.
+  */
+  lg.core.grpc.VirtualService virtual_service = 1;
+}
+
+
+
+/*
+  Response for taking a virtual server instance out of maintenance mode.
+*/
+message DisableVirtualServiceMaintenanceRs {}
+
+
+
+/*
+  Request to list virtual services with optional filters. If multiple filters
+  are specified, the server interprets the request as a conjunction of all
+  specified filters.
+*/
+message ListVirtualServicesRq {
+  /*
+    Filter by fully-qualified service name. An empty value disables this filter.
+  */
+  string filter_fq_service_name = 1;
+
+  /*
+    Filter by endpoint. An empty value, including empty host or port fields,
+    disables this filter.
+  */
+  lg.core.network.Endpoint filter_endpoint = 2;
+
+  /*
+    Fields 3-5 reserved for possible filters expansion.
+  */
+  reserved 3 to 5;
+
+  /*
+    Pagination information for the request.
+  */
+  lg.core.trait.PaginationRq pagination_request = 3;
+}
+
+
+
+/*
+  Response containing a list of registered virtual services.
+*/
+message ListVirtualServicesRs {
+  /*
+    A list of registered virtual services.
+  */
+  repeated lg.core.grpc.VirtualService services = 1;
+
+  /*
+    Pagination information for the response.
+  */
+  lg.core.trait.PaginationRs pagination_response = 3;
+}
+
+
+
+/*
+  Encapsulates all possible control stream events.
+*/
+message ControlStreamEvent {
+  /*
+    The InitRq message is used to initiate a new control stream. Clients must
+    send this request first when opening a new control stream. It contains
+    the request's ID, an optional session ID for resuming a previous session,
+    and the network endpoint.
+  */
+  message InitRq {
+    /*
+      The request ID, represented by an Id message from the lg.core.trait
+      package.
+    */
+    lg.core.trait.Id id = 1;
+
+    /*
+      The session ID for resuming a previous session.
+      - Must be empty when initiating a new stream with no previous context.
+      - Must be set to the session identifier of a previously ended stream
+        when reconnecting to the session and resuming it.
+    */
+    string session_id = 2;
+
+    /*
+      The network endpoint associated with the virtual service, as defined
+      in the lg.core.network package.
+    */
+    lg.core.network.Endpoint endpoint = 3;
+  }
+
+
+
+  /*
+    The InitRs message is a response to the InitRq message. Clients must wait
+    for this message before sending any subsequent requests. It contains the
+    request's ID, a session ID for resuming a disrupted session, and a Result
+    object that indicates the outcome of the initialization request.
+  */
+  message InitRs {
+    /*
+      The request ID, represented by an Id message from the lg.core.trait
+      package.
+    */
+    lg.core.trait.Id id = 1;
+
+    /*
+      The session ID for resuming a disrupted session. The client must retain
+      this string and use it when reconnecting and resuming a disrupted session.
+    */
+    string session_id = 2;
+
+    /*
+      The Result object from the lg.core.trait package, indicating the outcome
+      of the initialization request. Possible error codes include:
+      - ERROR_INVALID_ARGUMENT
+      - ERROR_ENDPOINT_UNREACHABLE
+    */
+    lg.core.trait.Result result = 3;
+  }
+
+
+
+  /*
+    The RegisterVirtualServiceRq message is used to request the registration
+    of a virtual service, containing the service's ID and its associated
+    VirtualService object.
+  */
+  message RegisterVirtualServiceRq {
+    /*
+      The ID of the virtual service to be registered, represented by an Id
+      message from the lg.core.trait package.
+    */
+    lg.core.trait.Id id = 1;
+
+    /*
+      The VirtualService object associated with the virtual service, as
+      defined in the lg.core.grpc package.
+    */
+    lg.core.grpc.VirtualService virtual_service = 2;
+  }
+
+
+
+  /*
+    The RegisterVirtualServiceRs message is a response to the
+    RegisterVirtualServiceRq message, confirming the registration of a virtual
+    service. Clients must wait for this message before sending any subsequent
+    requests referencing registered virtual service. It contains the request's
+    ID.
+  */
+  message RegisterVirtualServiceRs {
+    /*
+      The request ID, represented by an Id message from the lg.core.trait
+      package.
+    */
+    lg.core.trait.Id id = 1;
+
+    /*
+      The Result object from the lg.core.trait package, indicating the outcome
+      of the registration request. Possible error codes include:
+      - ERROR_INVALID_ARGUMENT
+    */
+    lg.core.trait.Result result = 2;
+  }
+
+
+
+  /*
+    The RegisterAgentRq message is used to request the registration of an agent
+    with a specific virtual service. It contains the request's ID, a
+    fully-qualified virtual service name, an agent ID, and an optional agent
+    instance ID.
+  */
+  message RegisterAgentRq {
+    /*
+      The request ID, represented by an Id message from the lg.core.trait
+      package.
+    */
+    lg.core.trait.Id id = 1;
+
+    /*
+      The fully-qualified virtual service name for which the agent is being
+      registered.
+    */
+    string fq_service_name = 2;
+
+    /*
+      The required agent ID.
+    */
+    string agent_id = 3;
+
+    /*
+      The agent instance ID.
+      - If left empty, an instance ID will be auto-generated.
+      - To register the agent as a singleton, set this field equal to the
+        agent_id value.
+    */
+    string agent_instance = 4;
+  }
+
+
+
+  /*
+    The RegisterAgentRs message is a response to the RegisterAgentRq message,
+    confirming the registration of an agent with a specific virtual service or
+    reporting any errors encountered during the process. It contains the request's
+    ID, agent ID, agent instance ID, and a Result object indicating the outcome
+    of the registration request.
+  */
+  message RegisterAgentRs {
+    /*
+      The request ID, represented by an Id message from the lg.core.trait package.
+    */
+    lg.core.trait.Id id = 1;
+
+    /*
+      The agent ID.
+    */
+    string agent_id = 3;
+
+    /*
+      The agent instance ID.
+    */
+    string agent_instance = 4;
+
+    /*
+      The Result object from the lg.core.trait package, indicating the outcome
+      of the registration request. Possible error codes include:
+      - ERROR_INVALID_ARGUMENT
+      - ERROR_UNKNOWN_VIRTUAL_SERVICE
+      - ERROR_CONFLICT
+    */
+    lg.core.trait.Result result = 2;
+  }
+
+
+
+  /*
+    The UnregisterAgentRq message is used to request the unregistration of an
+    agent from a specific virtual service. It contains the request's ID, a
+    fully-qualified virtual service name, an agent ID, and an agent instance ID.
+  */
+  message UnregisterAgentRq {
+    /*
+      The request ID, represented by an Id message from the lg.core.trait
+      package.
+    */
+    lg.core.trait.Id id = 1;
+
+    /*
+      The fully-qualified virtual service name from which the agent is being
+      unregistered.
+    */
+    string fq_service_name = 2;
+
+    /*
+      The required agent ID.
+    */
+    string agent_id = 3;
+
+    /*
+      The required agent instance ID.
+    */
+    string agent_instance = 4;
+  }
+
+
+
+  /*
+    The UnregisterAgentRs message is a response to the UnregisterAgentRq message,
+    confirming the unregistration of an agent from a specific virtual service or
+    reporting any errors encountered during the process. It contains the request's
+    ID and a Result object indicating the outcome of the unregistration request.
+  */
+  message UnregisterAgentRs {
+    /*
+      The request ID, represented by an Id message from the lg.core.trait package.
+    */
+    lg.core.trait.Id id = 1;
+
+    /*
+      The Result object from the lg.core.trait package, indicating the outcome
+      of the unregistration request. Possible error codes include:
+      - ERROR_INVALID_ARGUMENT
+      - ERROR_UNKNOWN_VIRTUAL_SERVICE
+    */
+    lg.core.trait.Result result = 2;
+  }
+
+
+
+  /*
+    The ConflictEvent message is sent only by the server to notify the client
+    of a conflict related to an agent within a virtual service. It does not
+    require a response. The conflicting agent is immediately unregistered upon
+    receiving this event and will no longer receive any requests sent to the
+    agent_id/agent_instance.
+  */
+  message ConflictEvent {
+    /*
+      The request ID, represented by an Id message from the lg.core.trait
+      package, used for consistency.
+    */
+    lg.core.trait.Id id = 1;
+
+    /*
+      The fully-qualified virtual service name where the conflict occurred.
+    */
+    string fq_service_name = 2;
+
+    /*
+      The conflicting agent ID.
+    */
+    string agent_id = 3;
+
+    /*
+      The conflicting agent instance ID.
+    */
+    string agent_instance = 4;
+
+    /*
+      A human-readable reason for the conflict. Clients should not rely on the
+      specific contents of this field.
+    */
+    string reason = 5;
+  }
+
+
+
+  oneof event {
+    InitRq init_rq = 1;
+    InitRs init_rs = 2;
+    RegisterVirtualServiceRq register_virtual_service_rq = 3;
+    RegisterVirtualServiceRs register_virtual_service_rs = 4;
+    RegisterAgentRq register_agent_rq = 5;
+    RegisterAgentRs register_agent_rs = 6;
+    UnregisterAgentRq unregister_agent_rq = 7;
+    UnregisterAgentRs unregister_agent_rs = 8;
+    ConflictEvent conflict_event = 9;
+  }
+}
+
+
+
+/*
+  Router registry virtual service.
+  This service is stateless, as router itself does not register any agent.
+*/
+service RegistryService {
+  /*
+    Registers virtual service.
+    Both stateless and stateful virtual services may be registered with this
+    unary RPC. However, stateful virtual services will require to establish
+    ControlStream to register agents' identifiers and instances.
+    This call is idempotent.
+  */
+  rpc RegisterVirtualService(RegisterVirtualServiceRq)
+    returns (RegisterVirtualServiceRs);
+
+  /*
+    Unregisters vurtual service.
+    No further calls will be routed to the virtual service with specified
+    network endpoint. All currently running streams will be brutally killed.
+    To gracefully stop the virtual service, use EnableVirtualServiceMaintenance
+    method.
+    This call is idempotent.
+  */
+  rpc UnregisterVirtualService(UnregisterVirtualServiceRq)
+    returns (UnregisterVirtualServiceRs);
+
+  /*
+    Enables maintenance mode for the virtual service instance, which implies the
+    following:
+    - Stateless calls will not be routed to the service endpoint.
+    - No calls will be made to the stateful service spawner.
+    - New registrations for the target virtual service instance will be
+      disallowed, only unregistration calls will pass.
+    - Existing active registrations will be maintained.
+    - Stateful calls will be routed to the registered agents.
+    - All currently established streams will remain active.
+    Please note that, as the registered agents may support both unidirectional
+    and bidirectional streams, the service could remain in maintenance mode for
+    an extended period, as new streams may be established during maintenance.
+    To address this, the target service can implement an internal maintenance
+    mode that can be enabled as needed.
+    This call is idempotent.
+  */
+  rpc EnableVirtualServiceMaintenance(EnableVirtualServiceMaintenanceRq)
+    returns (EnableVirtualServiceMaintenanceRs);
+
+  /*
+    Disables maintenance mode for the virtual service instance. Upon that, all
+    maintenance restrictions will be lifted immediately.
+    This call is idempotent.
+  */
+  rpc DisableVirtualServiceMaintenance(DisableVirtualServiceMaintenanceRq)
+    returns (DisableVirtualServiceMaintenanceRs);
+
+  /*
+    Lists registered virtual services with applied filtering and pagination.
+  */
+  rpc ListVirtualServices(ListVirtualServicesRq)
+    returns (ListVirtualServicesRs);
+
+  /*
+    Initiates a control stream, which is utilized for managing stateful
+    agents on the target virtual service.
+  */
+  rpc ControlStream(stream ControlStreamEvent)
+    returns (stream ControlStreamEvent);
+}

@@ -12,7 +12,7 @@
   registry_definition :: router_grpc_registry:definition() | undefined,
   is_client_fin :: boolean(),
   is_server_fin = false :: boolean(),
-  handler_state :: term() | undefined,
+  handler_pid :: term() | undefined,
   data_buffer = <<>> :: binary()
 }).
 
@@ -40,6 +40,24 @@
 
 
 
+%% Handler types
+
+
+
+-type handler_ret_ok_wait() :: wait.
+-type handler_ret_ok_reply(PduT) :: {reply, PduT}.
+-type handler_ret_ok_reply_fin(PduFinT) :: {reply_fin, PduFinT}.
+-type handler_ret_error_grpc_error(GrpcCodeT) :: {grpc_error, GrpcCodeT, grpc_message()}.
+-type handler_ret(PduT, PduFinT, GrpcCodeT) :: typr:generic_return(
+  OkRet :: handler_ret_ok_wait() | handler_ret_ok_reply(PduT) | handler_ret_ok_reply_fin(PduFinT),
+  ErrorRet :: handler_ret_error_grpc_error(GrpcCodeT)
+).
+-export_type([
+  handler_ret_ok_wait/0, handler_ret_ok_reply/1, handler_ret_ok_reply_fin/1,
+  handler_ret_error_grpc_error/1, handler_ret/3
+]).
+
+
 %% Interface
 
 
@@ -59,8 +77,11 @@ init(StreamId, #{
         service => Definition#router_grpc_registry_definition.service,
         method => Definition#router_grpc_registry_definition.method
       }}),
-      {ok, HS0} = Module:init(),
-      {[], #state{stream_id = StreamId, req = Req, registry_definition = Definition, handler_state = HS0}};
+      {ok, Pid} = Module:start_link(),
+      {
+        [{spawn, Pid, 5000}],
+        #state{stream_id = StreamId, req = Req, registry_definition = Definition, handler_pid = Pid}
+      };
     {error, undefined} ->
       ?l_debug(#{text => "Malformed gRPC request", what => init, details => #{path => Path}}),
       {
@@ -81,8 +102,8 @@ data(StreamId, Fin, Data, #state{registry_definition = Definition, data_buffer =
   IsFin = ?fin_to_bool(Fin),
   S1 = S0#state{stream_id = StreamId, is_client_fin = IsFin},
   case decode_data(<<Buffer/binary, Data/binary>>, Definition) of
-    {ok, {PDU, Rest}} ->
-      handle_grpc_pdu(PDU, S1#state{data_buffer = Rest});
+    {ok, {Pdu, Rest}} ->
+      handle_grpc_pdu(Pdu, S1#state{data_buffer = Rest});
     {error, {grpc_error, GrpcCode, GrpcMessage}} ->
       ?l_debug(#{text => "gRPC payload decode error", what => data, result => error, details => #{
         data => Data, code => GrpcCode, message => GrpcMessage
@@ -138,7 +159,7 @@ decode_data(
   #router_grpc_registry_definition{definition = Definition, input = Input}
 ) ->
   try Definition:decode_msg(Data, Input) of
-    PDU -> {ok, {PDU, Rest}}
+    Pdu -> {ok, {Pdu, Rest}}
   catch error:Reason ->
     {error, Reason}
   end;
@@ -148,8 +169,8 @@ decode_data(_Packet, _Definition) ->
 
 
 
-encode_data(PDU, #router_grpc_registry_definition{definition = Definition, output = Output}) ->
-  try Definition:encode_msg(PDU, Output) of
+encode_data(Pdu, #router_grpc_registry_definition{definition = Definition, output = Output}) ->
+  try Definition:encode_msg(Pdu, Output) of
     Data ->
       Len = byte_size(Data),
       {ok, ?non_compressed_data(Len, Data, <<>>)}
@@ -194,25 +215,32 @@ data_commands(Data, ServerFin) ->
 
 
 
-handle_grpc_pdu(PDU, #state{
+handle_grpc_pdu(Pdu, #state{
   registry_definition = #router_grpc_registry_definition{
     module = Module, function = Function
   },
-  handler_state = HS0
+  handler_pid = Pid
 } = S0) ->
-  case Module:Function(PDU, HS0) of
-    {ok, {ResponsePDU, HS1}} ->
-      handle_grpc_pdu_send_response(ResponsePDU, S0#state{handler_state = HS1});
-    {ok, {fin, ResponsePDU, HS1}} ->
-      handle_grpc_pdu_send_response(ResponsePDU, S0#state{is_server_fin = true, handler_state = HS1});
-    {error, {GrpcCode, GrpcMessage, HS1}} ->
-      handle_grpc_pdu_send_error(GrpcCode, GrpcMessage, S0#state{handler_state = HS1})
+  case Module:Function(Pid, Pdu) of
+    {ok, wait} ->
+      handle_grpc_pdu_wait(S0);
+    {ok, {reply, ResponsePDU}} ->
+      handle_grpc_pdu_send_response(ResponsePDU, S0);
+    {ok, {reply_fin, ResponsePDU}} ->
+      handle_grpc_pdu_send_response(ResponsePDU, S0#state{is_server_fin = true});
+    {error, {grpc_error, GrpcCode, GrpcMessage}} ->
+      handle_grpc_pdu_send_error(GrpcCode, GrpcMessage, S0)
   end.
 
 
 
-handle_grpc_pdu_send_response(PDU, #state{registry_definition = Definition} = S0) ->
-  case {S0#state.is_client_fin, S0#state.is_server_fin, encode_data(PDU, Definition)} of
+handle_grpc_pdu_wait(S0) ->
+  {[], S0}.
+
+
+
+handle_grpc_pdu_send_response(Pdu, #state{registry_definition = Definition} = S0) ->
+  case {S0#state.is_client_fin, S0#state.is_server_fin, encode_data(Pdu, Definition)} of
     {true, _, {ok, Data}} ->
       {response_commands(?grpc_code_ok, ?grpc_message_ok, Data), S0};
     {false, ServerFin, {ok, Data}} ->

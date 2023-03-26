@@ -1,0 +1,139 @@
+syntax = "proto3";
+
+package lg.core.grpc;
+
+import "lg/core/network.proto";
+
+
+
+/*
+  Represents a single gRPC virtual service. Any microservice application may
+  host several virtual services. Each virtual service is described by fully
+  qualified service name (package and service in terms of gRPC).
+
+  Virtual service might be of two types: stateless and stateful.
+
+  Stateless virtual service does not require any stateful actors registrations
+  and is a subject to different routing policies (round-robin, random, etc.).
+  Router is allowed to choose appropriate routing policy for Stateless Virtual
+  Services.
+
+  Stateful virtual service requires actors to be registered under mandatory
+  actor id. Routing any request to a stateful virtual service requires the
+  client to provide the said actor id.
+
+  Examples:
+
+  // Jousting Lobby service
+  VirtualService {
+    service = StatefulVirtualService {
+      package = "lg.service.jousting"
+      name = "LobbyService"
+      methods = [
+        Method {name = "ListBrackets"},
+        Method {name = "ListEstimates"}
+      ]
+      cmp = ConflictManagementPolicy.BLOCKING
+    }
+    endpoint = Endpoint {
+      host = "jousting.service.be",
+      port = 8137
+    }
+  }
+*/
+message VirtualService {
+  /*
+    Service method.
+  */
+  message Method {
+    string name = 1;
+  }
+
+  /*
+    Stateless virtual service.
+  */
+  message StatelessVirtualService {
+    /*
+      Service package (gRPC).
+    */
+    string package = 1;
+
+    /*
+      Service name (gRPC).
+    */
+    string name = 2;
+
+    /*
+      Collection of gRPC methods.
+    */
+    repeated Method methods = 3;
+  }
+
+  /*
+    Stateful virtual service.
+  */
+  message StatefulVirtualService {
+    /*
+      Conflict management policy.
+
+      Preemptive Conflict Management Policy (CMP) enables forced
+      re-registration.
+      This means that when a new registration is made for a specific identifier,
+      it takes precedence and successfully replaces any existing registration
+      with the same identifier.
+
+      Blocking Conflict Management Policy (CMP) prevents forced re-registration.
+      In this case, when a new registration is made for a specific identifier,
+      the existing registration holds its priority and remains active, while
+      newer registration call fails.
+    */
+    enum ConflictManagementPolicy {
+      PREEMPTIVE = 0;
+      BLOCKING = 1;
+    }
+
+    /*
+      Service package (gRPC).
+    */
+    string package = 1;
+
+    /*
+      Service name (gRPC).
+    */
+    string name = 2;
+
+    /*
+      Collection of gRPC methods.
+    */
+    repeated Method methods = 3;
+
+    /*
+      Conflict management policy.
+    */
+    ConflictManagementPolicy cmp = 4;
+  }
+
+  /*
+    Virtual service definition.
+  */
+  oneof service {
+    StatelessVirtualService stateless = 1;
+    StatefulVirtualService stateful = 2;
+  }
+
+  /*
+    Fields 3 and 4 reserved for possible service variances.
+  */
+  reserved 3, 4;
+
+  /*
+    Maintenance mode flag (see lg.service.router.RegistryService for further
+    details).
+  */
+  bool maintenance_mode_enabled = 5;
+
+  /*
+    Network endpoint of the virtual service.
+  */
+  lg.core.network.Endpoint endpoint = 6;
+}
