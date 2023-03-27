@@ -1,0 +1,12 @@
+[macro grpc-call-unary proto infile outfile service method]
+  !${EVANS} \
+    --path ${ROUTER_DIR_PROTO} \
+    --proto ${proto} \
+    --host localhost \
+    --port ${ROUTER_APP_GRPC_LISTENER_PORT} \
+    --file ${infile} \
+    cli call --output json --enrich ${service}.${method} > ${outfile}
+  # Cannot check for exit code here, because evans exits with error in case
+  # of an error response, duh.
+  # [invoke check-ok]
+[endmacro]

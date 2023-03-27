@@ -1,0 +1,17 @@
+{
+  "virtual_service": {
+    "stateless": {
+      "package": "lg.test.package",
+      "name": "",
+      "methods": [
+        {"name": "MethodOne"},
+        {"name": "MethodTwo"},
+        {"name": "MethodThree"}
+      ]
+    },
+    "endpoint": {
+      "host": "test.lg",
+      "port": 8137
+    }
+  }
+}

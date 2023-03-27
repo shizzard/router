@@ -1,0 +1,9 @@
+[macro jq-check-file infile filter]
+  !${JQ} -Mr '${filter}' ${infile}
+[endmacro]
+
+[macro jq-check-file-match infile filter match]
+  !${JQ} -Mr '${filter}' ${infile}
+  ??${match}
+  [invoke check-ok]
+[endmacro]

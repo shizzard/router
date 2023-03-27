@@ -4,6 +4,7 @@ package lg.service.router;
 
 import "lg/core/grpc.proto";
 import "lg/core/trait.proto";
+import "lg/core/network.proto";
 
 
 
@@ -111,7 +112,7 @@ message ListVirtualServicesRq {
   /*
     Pagination information for the request.
   */
-  lg.core.trait.PaginationRq pagination_request = 3;
+  lg.core.trait.PaginationRq pagination_request = 6;
 }
 
 
@@ -128,7 +129,7 @@ message ListVirtualServicesRs {
   /*
     Pagination information for the response.
   */
-  lg.core.trait.PaginationRs pagination_response = 3;
+  lg.core.trait.PaginationRs pagination_response = 2;
 }
 
 

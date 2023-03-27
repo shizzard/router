@@ -10,10 +10,10 @@ MAKEFLAGS += --no-builtin-rules
 SHELL := bash
 
 export TEST_ROOT := $(abspath ./)
-include ./*.mk
+-include ./*.mk
 
 JQ := $(shell which jq)
-EVANS = $(shell which evans)
+EVANS := $(shell which evans)
 
 ifeq (, $(JQ))
 $(warning "No jq found, is it installed?")
@@ -33,4 +33,4 @@ build:
 
 .PHONY: clean
 clean:
-	rm -rf lux_logs
+	rm -rf lux_logs router_logs

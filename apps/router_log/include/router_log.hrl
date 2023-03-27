@@ -1,5 +1,6 @@
 -include_lib("kernel/include/logger.hrl").
 
+-define(l_dev(Map), ?LOG_DEBUG(router_log:log_map(Map), router_log:log_meta(Map))).
 -define(l_debug(Map), ?LOG_DEBUG(router_log:log_map(Map), router_log:log_meta(Map))).
 -define(l_info(Map), ?LOG_INFO(router_log:log_map(Map), router_log:log_meta(Map))).
 -define(l_notice(Map), ?LOG_NOTICE(router_log:log_map(Map), router_log:log_meta(Map))).

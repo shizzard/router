@@ -19,6 +19,7 @@ ROUTER_DIR_TESTS := $(ROUTER_DIR_ROOT)/tests
 ROUTER_DIR_BUILD := $(ROUTER_DIR_ROOT)/_build
 ROUTER_DIR_TOOLS := $(ROUTER_DIR_ROOT)/_tools
 ROUTER_DIR_LOGS := $(ROUTER_DIR_ROOT)/_logs
+ROUTER_DIR_PROTO := $(ROUTER_DIR_APPS)/router_pb/priv/proto
 
 ifeq (, $(ERLC))
 $(warning "No erlc found, is erlang installed?")
@@ -150,11 +151,20 @@ lux-tests: $(RELEASE_TEST_BIN) $(RELEASE_TEST_BIN_CLI) $(TOOL_LUX)
 		echo; echo " -> TESTCASE $(dir)"; $(MAKE) -C $(dir) build all; echo;)
 	@echo "=====    LUX END   ====="
 
+.PHONY: lux-clean
+ROUTER_DIR_TESTS_LUX := $(ROUTER_DIR_TESTS)/lux
+lux-clean: $(RELEASE_TEST_BIN) $(RELEASE_TEST_BIN_CLI) $(TOOL_LUX)
+	@echo "=====   LUX CLEAN  ====="
+	@$(foreach dir,\
+		$(shell $(TOOL_LUX) --mode=list_dir $(ROUTER_DIR_TESTS_LUX)),\
+		echo; echo " -> TESTCASE $(dir)"; $(MAKE) -C $(dir) clean; echo;)
+	@echo "=====    LUX END   ====="
+
 ################################################################################
 # Erlang clean
 
 .PHONY: clean
-clean:
+clean: lux-clean
 	$(REBAR) clean -a
 
 .PHONY: dist-clean

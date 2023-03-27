@@ -9,7 +9,7 @@
 -record(state, {
   stream_id :: cowboy_stream:streamid() | undefined,
   req :: cowboy_req:req() | undefined,
-  registry_definition :: router_grpc_registry:definition() | undefined,
+  registry_details :: router_grpc_registry:details() | undefined,
   is_client_fin :: boolean(),
   is_server_fin = false :: boolean(),
   handler_pid :: term() | undefined,
@@ -47,7 +47,10 @@
 -type handler_ret_ok_wait() :: wait.
 -type handler_ret_ok_reply(PduT) :: {reply, PduT}.
 -type handler_ret_ok_reply_fin(PduFinT) :: {reply_fin, PduFinT}.
--type handler_ret_error_grpc_error(GrpcCodeT) :: {grpc_error, GrpcCodeT, grpc_message()}.
+-type handler_ret_error_grpc_error(GrpcCodeT) ::
+  {grpc_error, GrpcCodeT, grpc_message()} |
+  {grpc_error, GrpcCodeT, grpc_message(), map() | binary()} |
+  {grpc_error, GrpcCodeT, grpc_message(), map(), binary()}.
 -type handler_ret(PduT, PduFinT, GrpcCodeT) :: typr:generic_return(
   OkRet :: handler_ret_ok_wait() | handler_ret_ok_reply(PduT) | handler_ret_ok_reply_fin(PduFinT),
   ErrorRet :: handler_ret_error_grpc_error(GrpcCodeT)
@@ -72,15 +75,19 @@ init(StreamId, #{
 } = Req, _Opts) ->
   router_log:component(router_grpc),
   case router_grpc_registry:lookup(Path) of
-    {ok, #router_grpc_registry_definition{module = Module} = Definition} ->
-      ?l_debug(#{text => "gRPC request", what => init, details => #{
-        service => Definition#router_grpc_registry_definition.service,
-        method => Definition#router_grpc_registry_definition.method
+    {ok, #router_grpc_registry_definition{
+      details = #router_grpc_registry_definition_details_internal{
+        module = Module
+      } = Details}
+    } ->
+      ?l_debug(#{text => "Internal gRPC request", what => init, details => #{
+        service => Details#router_grpc_registry_definition_details_internal.service,
+        method => Details#router_grpc_registry_definition_details_internal.method
       }}),
       {ok, Pid} = Module:start_link(),
       {
         [{spawn, Pid, 5000}],
-        #state{stream_id = StreamId, req = Req, registry_definition = Definition, handler_pid = Pid}
+        #state{stream_id = StreamId, req = Req, registry_details = Details, handler_pid = Pid}
       };
     {error, undefined} ->
       ?l_debug(#{text => "Malformed gRPC request", what => init, details => #{path => Path}}),
@@ -98,10 +105,10 @@ init(_StreamId, _Req, _Opts) ->
 
 -spec data(term(), term(), term(), term()) -> term().
 
-data(StreamId, Fin, Data, #state{registry_definition = Definition, data_buffer = Buffer} = S0) ->
+data(StreamId, Fin, Data, #state{registry_details = Details, data_buffer = Buffer} = S0) ->
   IsFin = ?fin_to_bool(Fin),
   S1 = S0#state{stream_id = StreamId, is_client_fin = IsFin},
-  case decode_data(<<Buffer/binary, Data/binary>>, Definition) of
+  case decode_data(<<Buffer/binary, Data/binary>>, Details) of
     {ok, {Pdu, Rest}} ->
       handle_grpc_pdu(Pdu, S1#state{data_buffer = Rest});
     {error, {grpc_error, GrpcCode, GrpcMessage}} ->
@@ -156,7 +163,7 @@ decode_data(?compressed_data(Len, _Data, _Rest), _Definition) ->
 
 decode_data(
   ?non_compressed_data(Len, Data, Rest),
-  #router_grpc_registry_definition{definition = Definition, input = Input}
+  #router_grpc_registry_definition_details_internal{definition = Definition, input = Input}
 ) ->
   try Definition:decode_msg(Data, Input) of
     Pdu -> {ok, {Pdu, Rest}}
@@ -169,7 +176,7 @@ decode_data(_Packet, _Definition) ->
 
 
 
-encode_data(Pdu, #router_grpc_registry_definition{definition = Definition, output = Output}) ->
+encode_data(Pdu, #router_grpc_registry_definition_details_internal{definition = Definition, output = Output}) ->
   try Definition:encode_msg(Pdu, Output) of
     Data ->
       Len = byte_size(Data),
@@ -194,7 +201,19 @@ response_commands(GrpcCode, GrpcMessage) ->
 
 
 
-response_commands(GrpcCode, GrpcMessage, Data) ->
+response_commands(GrpcCode, GrpcMessage, Trailers) when is_map(Trailers) ->
+  [
+    {headers, <<"200">>, #{
+      ?grpc_header_content_type => <<"application/grpc+proto">>,
+      ?grpc_header_user_agent => <<"grpc-erlang-lg-router/0.1.0">>
+    }},
+    {trailers, maps:merge(Trailers, #{
+      ?grpc_header_code => integer_to_binary(GrpcCode),
+      ?grpc_header_message => GrpcMessage
+    })}
+  ];
+
+response_commands(GrpcCode, GrpcMessage, Data) when is_binary(Data) ->
   [
     {headers, <<"200">>, #{
       ?grpc_header_content_type => <<"application/grpc+proto">>,
@@ -209,6 +228,21 @@ response_commands(GrpcCode, GrpcMessage, Data) ->
 
 
 
+response_commands(GrpcCode, GrpcMessage, Trailers, Data) when is_map(Trailers), is_binary(Data) ->
+  [
+    {headers, <<"200">>, #{
+      ?grpc_header_content_type => <<"application/grpc+proto">>,
+      ?grpc_header_user_agent => <<"grpc-erlang-lg-router/0.1.0">>
+    }},
+    {data, nofin, Data},
+    {trailers, maps:merge(Trailers, #{
+      ?grpc_header_code => integer_to_binary(GrpcCode),
+      ?grpc_header_message => GrpcMessage
+    })}
+  ].
+
+
+
 data_commands(Data, ServerFin) ->
   [data, ?bool_to_fin(ServerFin), Data].
 
@@ -216,7 +250,7 @@ data_commands(Data, ServerFin) ->
 
 
 handle_grpc_pdu(Pdu, #state{
-  registry_definition = #router_grpc_registry_definition{
+  registry_details = #router_grpc_registry_definition_details_internal{
     module = Module, function = Function
   },
   handler_pid = Pid
@@ -229,7 +263,11 @@ handle_grpc_pdu(Pdu, #state{
     {ok, {reply_fin, ResponsePDU}} ->
       handle_grpc_pdu_send_response(ResponsePDU, S0#state{is_server_fin = true});
     {error, {grpc_error, GrpcCode, GrpcMessage}} ->
-      handle_grpc_pdu_send_error(GrpcCode, GrpcMessage, S0)
+      handle_grpc_pdu_send_error(GrpcCode, GrpcMessage, S0);
+    {error, {grpc_error, GrpcCode, GrpcMessage, TrailersOrData}} ->
+      handle_grpc_pdu_send_error(GrpcCode, GrpcMessage, TrailersOrData, S0);
+    {error, {grpc_error, GrpcCode, GrpcMessage, Trailers, Data}} ->
+      handle_grpc_pdu_send_error(GrpcCode, GrpcMessage, Trailers, Data, S0)
   end.
 
 
@@ -239,8 +277,8 @@ handle_grpc_pdu_wait(S0) ->
 
 
 
-handle_grpc_pdu_send_response(Pdu, #state{registry_definition = Definition} = S0) ->
-  case {S0#state.is_client_fin, S0#state.is_server_fin, encode_data(Pdu, Definition)} of
+handle_grpc_pdu_send_response(Pdu, #state{registry_details = Details} = S0) ->
+  case {S0#state.is_client_fin, S0#state.is_server_fin, encode_data(Pdu, Details)} of
     {true, _, {ok, Data}} ->
       {response_commands(?grpc_code_ok, ?grpc_message_ok, Data), S0};
     {false, ServerFin, {ok, Data}} ->
@@ -257,3 +295,13 @@ handle_grpc_pdu_send_response(Pdu, #state{registry_definition = Definition} = S0
 
 handle_grpc_pdu_send_error(GrpcCode, GrpcMessage, S0) ->
   {response_commands(GrpcCode, GrpcMessage), S0}.
+
+
+
+handle_grpc_pdu_send_error(GrpcCode, GrpcMessage, TrailersOrData, S0) ->
+  {response_commands(GrpcCode, GrpcMessage, TrailersOrData), S0}.
+
+
+
+handle_grpc_pdu_send_error(GrpcCode, GrpcMessage, Trailers, Data, S0) ->
+  {response_commands(GrpcCode, GrpcMessage, Trailers, Data), S0}.

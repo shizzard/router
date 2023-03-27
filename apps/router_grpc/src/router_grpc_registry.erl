@@ -8,7 +8,7 @@
 -include_lib("router_log/include/router_log.hrl").
 -include_lib("typr/include/typr_specs_gen_server.hrl").
 
--export([lookup/1]).
+-export([restricted_packages/0, register/1, lookup/1]).
 -export([
   start_link/2, init/1,
   handle_call/3, handle_cast/2, handle_info/2,
@@ -21,16 +21,21 @@
 -type state() :: #state{}.
 
 -type definition() :: #router_grpc_registry_definition{}.
--export_type([definition/0]).
+-type details_internal() :: #router_grpc_registry_definition_details_internal{}.
+-type details_external() :: #router_grpc_registry_definition_details_external{}.
+-type details() :: details_internal() | details_external().
+-export_type([definition/0, details_internal/0, details_external/0, details/0]).
 
 -define(service_method_id(Service, Method), {Service, Method}).
+
+-define(restricted_packages, [<<"lg.service.router">>]).
 
 
 
 %% Messages
 
-% -define(call_set_proxy(Provider, Id, Proxy), {call_set_proxy, Provider, Id, Proxy}).
-% -define(call_remove_proxy(Provider, Id), {call_remove_proxy, Provider, Id}).
+-define(call_register(Details), {call_register, Details}).
+
 
 
 %% Metrics
@@ -43,6 +48,22 @@
 
 
 
+-spec restricted_packages() -> [binary(), ...].
+
+restricted_packages() -> ?restricted_packages.
+
+
+
+-spec register(Details :: router_grpc_registry:details_external()) ->
+  typr:generic_return(
+    ErrorRet :: term()
+  ).
+
+register(#router_grpc_registry_definition_details_external{} = Details) ->
+  gen_server:call(?MODULE, ?call_register(Details)).
+
+
+
 -spec lookup(Path :: binary()) ->
   typr:generic_return(
     OkRet :: definition(),
@@ -51,10 +72,7 @@
 
 lookup(Path) ->
   try
-    [ServiceName, MethodName] = [
-      binary_to_existing_atom(Part) || Part
-      <- binary:split(Path, <<"/">>, [global]), Part =/= <<>>
-    ],
+    [ServiceName, MethodName] = [Part || Part <- binary:split(Path, <<"/">>, [global]),Part =/= <<>>],
     case ets:lookup(?MODULE, ?service_method_id(ServiceName, MethodName)) of
       [Definition] -> {ok, Definition};
       [] -> {error, undefined}
@@ -92,6 +110,16 @@ init({ServiceDefinitions, ServiceMap}) ->
 %% Handlers
 
 
+
+handle_call(?call_register(#router_grpc_registry_definition_details_external{
+  service = ServiceName, method = MethodName
+} = Details), _GenReplyTo, S0) ->
+  Definition = #router_grpc_registry_definition{
+    id = ?service_method_id(ServiceName, MethodName),
+    details = Details
+  },
+  ets:insert(S0#state.ets, Definition),
+  {reply, ok, S0};
 
 handle_call(Unexpected, _GenReplyTo, S0) ->
   ?l_error(#{text => "Unexpected call", what => handle_call, details => Unexpected}),
@@ -143,26 +171,30 @@ init_ets_table_service(ServiceName, ServiceDefinition, ServiceMap, S0) ->
   case maps:get(ServiceName, ServiceMap, undefined) of
     undefined -> ok;
     ModuleName ->
-      {{service, ServiceName}, ServiceMethods} = ServiceDefinition:get_service_def(ServiceName),
-      init_ets_table_service_methods(ServiceName, ServiceDefinition, ServiceMethods, ModuleName, S0)
+      {{service, ServiceName}, Methods} = ServiceDefinition:get_service_def(ServiceName),
+      init_ets_table_service_methods(ServiceName, ServiceDefinition, Methods, ModuleName, S0)
   end.
 
 
 
-init_ets_table_service_methods(ServiceName, ServiceDefinition, ServiceMethods, ModuleName, S0) ->
+init_ets_table_service_methods(ServiceName, ServiceDefinition, Methods, ModuleName, S0) ->
   MethodDefinitions = lists:flatten([
     begin
       %% Check if configured module exports corresponding function with arity 2
-      FunctionName = atom_snake_case(ServiceMethodName),
+      FunctionName = atom_snake_case(MethodName),
       ModuleExports = ModuleName:module_info(exports),
       ExportedArities = proplists:get_all_values(FunctionName, ModuleExports),
       case lists:member(2, ExportedArities) of
         true ->
+          ServiceNameBin = atom_to_binary(ServiceName),
+          MethodNameBin = atom_to_binary(MethodName),
           #router_grpc_registry_definition{
-            id = ?service_method_id(ServiceName, ServiceMethodName),
-            definition = ServiceDefinition, service = ServiceName, method = ServiceMethodName,
-            module = ModuleName, function = FunctionName, input = Input, output = Output,
-            input_stream = InputStream, output_stream = OutputStream, opts = Opts
+            id = ?service_method_id(ServiceNameBin, MethodNameBin),
+            details = #router_grpc_registry_definition_details_internal{
+              definition = ServiceDefinition, service = ServiceNameBin, method = MethodNameBin,
+              module = ModuleName, function = FunctionName, input = Input, output = Output,
+              input_stream = InputStream, output_stream = OutputStream, opts = Opts
+            }
           };
         false when length(ExportedArities) == 0 ->
           ?l_warning(#{
@@ -186,9 +218,9 @@ init_ets_table_service_methods(ServiceName, ServiceDefinition, ServiceMethods, M
           []
       end
     end || #rpc{
-      name = ServiceMethodName, input = Input, output = Output,
+      name = MethodName, input = Input, output = Output,
       input_stream = InputStream, output_stream = OutputStream, opts = Opts
-    } <- ServiceMethods
+    } <- Methods
   ]),
   ets:insert(S0#state.ets, MethodDefinitions).
 

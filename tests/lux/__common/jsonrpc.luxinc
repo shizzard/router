@@ -2,13 +2,3 @@
   !curl -s -o ${outfile} -d @${infile} http://localhost:${ROUTER_APP_HTTP_API_PORT}/jsonrpc
   [invoke check-ok]
 [endmacro]
-
-[macro jq-check-file infile filter]
-  !jq -M '${filter}' ${infile}
-[endmacro]
-
-[macro jq-check-file-match infile filter match]
-  !jq -M '${filter}' ${infile}
-  ?${match}
-  [invoke check-ok]
-[endmacro]
