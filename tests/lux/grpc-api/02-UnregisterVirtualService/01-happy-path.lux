@@ -7,20 +7,23 @@ Check if router accepts gRPC virtual service registration.
 [include ../../__common/jq.luxinc]
 
 [global service-definition=lg/service/router/registry.proto]
-[global request-file-register=json/01-happy-path-request.json]
-[global response-file-register=json/01-happy-path-response.json]
+[global request-file-register=json/01-register-request.json]
+[global response-file-register=json/01-register-response.json]
 [global request-file-list=json/01-list-request.json]
 [global response-file-list=json/01-list-response.json]
+[global request-file-unregister=json/01-happy-path-request.json]
+[global response-file-unregister=json/01-happy-path-response.json]
 [global service=lg.service.router.RegistryService]
-[global method-request=RegisterVirtualService]
+[global method-register=RegisterVirtualService]
 [global method-list=ListVirtualServices]
+[global method-unregister=UnregisterVirtualService]
 
 [shell router]
   [invoke app-start]
 
 [shell request]
   [progress (register)]
-  [invoke grpc-call-unary ${service-definition} ${request-file-register} ${response-file-register} ${service} ${method-request}]
+  [invoke grpc-call-unary ${service-definition} ${request-file-register} ${response-file-register} ${service} ${method-register}]
   [sleep 1]
 
 [shell response]
@@ -48,6 +51,21 @@ Check if router accepts gRPC virtual service registration.
   [invoke jq-check-file-match ${response-file-list} .messages[0].services[0].endpoint.port 8137]
   [invoke jq-check-file-match ${response-file-list} .trailer "{}"]
 
+[shell request]
+  [progress (unregister)]
+  [invoke grpc-call-unary ${service-definition} ${request-file-unregister} ${response-file-unregister} ${service} ${method-unregister}]
+  [sleep 1]
+
+[shell response]
+  [progress (check response)]
+  [invoke jq-check-file-match ${response-file-unregister} .header.\"content-type\" "application/grpc+proto"]
+  [invoke jq-check-file-match ${response-file-unregister} .header.\"grpc-user-agent\" "router/"]
+  [invoke jq-check-file-match ${response-file-unregister} .status.code OK]
+  [invoke jq-check-file-match ${response-file-unregister} .status.number 0]
+  [invoke jq-check-file-match ${response-file-unregister} .messages[0] "{}"]
+  [invoke jq-check-file-match ${response-file-unregister} .trailer "{}"]
+
 [cleanup]
   !rm ${response-file-register}
   !rm ${response-file-list}
+  !rm ${response-file-unregister}

@@ -9,16 +9,16 @@
 -include_lib("typr/include/typr_specs_gen_server.hrl").
 
 -export([
-  restricted_packages/0, register/6, lookup/1, lookup_internal/1, lookup_external/1, get_list/0,
-  is_maintenance/1, set_maintenance/2
+  restricted_packages/0, register/6, unregister/4, lookup/1, lookup_internal/1, lookup_external/1, get_list/0,
+  is_maintenance/3, set_maintenance/4
 ]).
 -export([start_link/2, init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
 -define(service_ets_key(Type, Path, Host, Port), {Type, Path, Host, Port}).
 -define(persistent_term_key_internal(Path), {?MODULE, persistent_term_key_internal, Path}).
 -define(
-  persistent_term_key_external_maintenance(ServiceName),
-  {?MODULE, persistent_term_key_external_maintenance, ServiceName}
+  persistent_term_key_external_maintenance(ServiceName, Host, Port),
+  {?MODULE, persistent_term_key_external_maintenance, ServiceName, Host, Port}
 ).
 -define(restricted_packages, [<<"lg.service.router">>]).
 
@@ -51,6 +51,10 @@
 -define(
   call_register(Type, ServiceName, Methods, Maintenance, Host, Port),
   {call_register, Type, ServiceName, Methods, Maintenance, Host, Port}
+).
+-define(
+  call_unregister(Type, ServiceName, Host, Port),
+  {call_unregister, Type, ServiceName, Host, Port}
 ).
 
 
@@ -85,6 +89,21 @@ restricted_packages() -> ?restricted_packages.
 
 register(Type, ServiceName, Methods, Maintenance, Host, Port) ->
   gen_server:call(?MODULE, ?call_register(Type, ServiceName, Methods, Maintenance, Host, Port)).
+
+
+
+-spec unregister(
+  Type :: service_type(),
+  ServiceName :: service_name(),
+  Host :: endpoint_host(),
+  Port :: endpoint_port()
+) ->
+  typr:generic_return(
+    ErrorRet :: term()
+  ).
+
+unregister(Type, ServiceName, Host, Port) ->
+  gen_server:call(?MODULE, ?call_unregister(Type, ServiceName, Host, Port)).
 
 
 
@@ -146,22 +165,24 @@ get_list() ->
 
 
 
--spec is_maintenance(ServiceName :: service_name()) ->
+-spec is_maintenance(ServiceName :: service_name(), Host :: endpoint_host(), Port :: endpoint_port()) ->
   Ret :: boolean().
 
-is_maintenance(ServiceName) ->
-  persistent_term:get(?persistent_term_key_external_maintenance(ServiceName), false).
+is_maintenance(ServiceName, Host, Port) ->
+  persistent_term:get(?persistent_term_key_external_maintenance(ServiceName, Host, Port), false).
 
 
 
--spec set_maintenance(ServiceName :: service_name(), Bool :: boolean()) ->
+-spec set_maintenance(
+  ServiceName :: service_name(), Host :: endpoint_host(), Port :: endpoint_port(), Bool :: boolean()
+) ->
   Ret :: typr:ok_return().
 
-set_maintenance(ServiceName, true) ->
-  persistent_term:set(?persistent_term_key_external_maintenance(ServiceName), true);
+set_maintenance(ServiceName, Host, Port, true) ->
+  persistent_term:set(?persistent_term_key_external_maintenance(ServiceName, Host, Port), true);
 
-set_maintenance(ServiceName, false) ->
-  _ = persistent_term:erase(?persistent_term_key_external_maintenance(ServiceName)),
+set_maintenance(ServiceName, Host, Port, false) ->
+  _ = persistent_term:erase(?persistent_term_key_external_maintenance(ServiceName, Host, Port)),
   ok.
 
 
@@ -204,9 +225,16 @@ handle_call(?call_register(Type, ServiceName, Methods, Maintenance, Host, Port),
     ets:insert(S0#state.ets, Definition)
   end, Methods),
   case Maintenance of
-    true -> persistent_term:put(?persistent_term_key_external_maintenance(ServiceName), Maintenance);
+    true -> persistent_term:put(?persistent_term_key_external_maintenance(ServiceName, Host, Port), Maintenance);
     false -> ok
   end,
+  {reply, ok, S0};
+
+handle_call(?call_unregister(Type, ServiceName, Host, Port), _GenReplyTo, S0) ->
+  ets:match_delete(?MODULE, #router_grpc_registry_definition_external{
+    id = ?service_ets_key(Type, '_', Host, Port),
+    type = '_', service = ServiceName, methods = '_', host = '_', port = '_'
+  }),
   {reply, ok, S0};
 
 handle_call(Unexpected, _GenReplyTo, S0) ->

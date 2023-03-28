@@ -1,0 +1,34 @@
+[doc]
+Check if router fails to register a gRPC virtual service with empty name.
+[enddoc]
+
+[include ../../__common/common.luxinc]
+[include ../../__common/grpc.luxinc]
+[include ../../__common/jq.luxinc]
+
+[global service-definition=lg/service/router/registry.proto]
+[global request-file-empty=json/03-empty-name-request.json]
+[global response-file-empty=json/03-empty-name-response.json]
+[global service=lg.service.router.RegistryService]
+[global method=UnregisterVirtualService]
+
+[shell router]
+  [invoke app-start]
+
+[shell request]
+  [progress (register with empty name)]
+  [invoke grpc-call-unary ${service-definition} ${request-file-empty} ${response-file-empty} ${service} ${method}]
+  [sleep 1]
+
+[shell response]
+  [progress (check response)]
+  [invoke jq-check-file-match ${response-file-empty} .header.\"content-type\" "application/grpc+proto"]
+  [invoke jq-check-file-match ${response-file-empty} .header.\"grpc-user-agent\" "router/"]
+  [invoke jq-check-file-match ${response-file-empty} .status.code InvalidArgument]
+  [invoke jq-check-file-match ${response-file-empty} .status.number 3]
+  [invoke jq-check-file-match ${response-file-empty} .status.message "Invalid payload"]
+  [invoke jq-check-file-match ${response-file-empty} .messages null]
+  [invoke jq-check-file-match ${response-file-empty} .trailer.name_empty "Virtual service name cannot be empty"]
+
+[cleanup]
+  !rm ${response-file-empty}

@@ -172,12 +172,12 @@ init([]) ->
 
 handle_call(?call_register_virtual_service(Pdu), _GenReplyTo, S0) ->
   case call_register_virtual_service_validate(Pdu) of
-    ok ->
+    {ok, RetPdu} ->
       ?l_debug(#{
         text => "Virtual service registered", what => call_register_virtual_service,
         result => ok
       }),
-      {reply, {ok, {reply_fin, #'lg.service.router.RegisterVirtualServiceRs'{}}}, S0};
+      {reply, {ok, {reply_fin, RetPdu}}, S0};
     {error, Trailers} ->
       ?l_debug(#{
         text => "Failed to register virtual service", what => call_register_virtual_service,
@@ -186,8 +186,21 @@ handle_call(?call_register_virtual_service(Pdu), _GenReplyTo, S0) ->
       {reply, {error, {grpc_error, ?grpc_code_invalid_argument, ?grpc_message_invalid_argument_payload, Trailers}}, S0}
   end;
 
-handle_call(?call_unregister_virtual_service(_Pdu), _GenReplyTo, S0) ->
-  {reply, {ok, {reply_fin, #'lg.service.router.UnregisterVirtualServiceRs'{}}}, S0};
+handle_call(?call_unregister_virtual_service(Pdu), _GenReplyTo, S0) ->
+  case call_unregister_virtual_service_validate(Pdu) of
+    {ok, RetPdu} ->
+      ?l_debug(#{
+        text => "Virtual service unregistered", what => call_unregister_virtual_service,
+        result => ok
+      }),
+      {reply, {ok, {reply_fin, RetPdu}}, S0};
+    {error, Trailers} ->
+      ?l_debug(#{
+        text => "Failed to unregister virtual service", what => call_unregister_virtual_service,
+        result => error, details => #{trailers => Trailers}
+      }),
+      {reply, {error, {grpc_error, ?grpc_code_invalid_argument, ?grpc_message_invalid_argument_payload, Trailers}}, S0}
+  end;
 
 handle_call(?call_enable_virtual_service_maintenance(_Pdu), _GenReplyTo, S0) ->
   {reply, {ok, {reply_fin, #'lg.service.router.EnableVirtualServiceMaintenanceRs'{}}}, S0};
@@ -263,7 +276,8 @@ call_register_virtual_service_validate(
   case ErrorList of
     [] ->
       ServiceName = <<Package/binary, ".", Name/binary>>,
-      ok = router_grpc_registry:register(stateless, ServiceName, Methods, MaintenanceMode, Host, Port);
+      ok = router_grpc_registry:register(stateless, ServiceName, Methods, MaintenanceMode, Host, Port),
+      {ok, #'lg.service.router.RegisterVirtualServiceRs'{}};
     _ ->
       {error, maps:from_list(ErrorList)}
   end.
@@ -299,6 +313,33 @@ call_list_virtual_services_filter(FilterFqServiceName, FilterHost, FilterPort, _
 
 
 
+call_unregister_virtual_service_validate(#'lg.service.router.UnregisterVirtualServiceRq'{
+  virtual_service = #'lg.core.grpc.VirtualService'{
+    service = {stateless, #'lg.core.grpc.VirtualService.StatelessVirtualService'{
+      package = Package0,
+      name = Name0
+    }},
+    endpoint = #'lg.core.network.Endpoint'{host = Host0, port = Port0}
+  }
+}) ->
+  {PackageErrors, Package} = validate_package(Package0),
+  {NameErrors, Name} = validate_name(Name0),
+  {HostErrors, Host} = validate_host(Host0),
+  {PortErrors, Port} = validate_port(Port0),
+  ErrorList = [Error || Error <- lists:flatten([
+    PackageErrors, NameErrors, HostErrors, PortErrors
+  ]), Error /= undefined],
+  case ErrorList of
+    [] ->
+      ServiceName = <<Package/binary, ".", Name/binary>>,
+      ok = router_grpc_registry:unregister(stateless, ServiceName, Host, Port),
+      {ok, #'lg.service.router.UnregisterVirtualServiceRs'{}};
+    _ ->
+      {error, maps:from_list(ErrorList)}
+  end.
+
+
+
 %% Filters and maps
 
 
@@ -330,7 +371,7 @@ call_list_virtual_services_map(#router_grpc_registry_definition_external{
       service = {stateless, #'lg.core.grpc.VirtualService.StatelessVirtualService'{
         methods = [#'lg.core.grpc.VirtualService.Method'{name = MethodName} || MethodName <- Methods]
       }},
-      maintenance_mode_enabled = router_grpc_registry:is_maintenance(ServiceName),
+      maintenance_mode_enabled = router_grpc_registry:is_maintenance(ServiceName, Host, Port),
       endpoint = #'lg.core.network.Endpoint'{host = Host, port = Port}
     }.
 
