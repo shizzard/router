@@ -75,14 +75,10 @@ init(StreamId, #{
 } = Req, _Opts) ->
   router_log:component(router_grpc),
   case router_grpc_registry:lookup(Path) of
-    {ok, #router_grpc_registry_definition{
-      details = #router_grpc_registry_definition_details_internal{
-        module = Module
-      } = Details}
-    } ->
+    {ok, #router_grpc_registry_definition_internal{module = Module} = Details} ->
       ?l_debug(#{text => "Internal gRPC request", what => init, details => #{
-        service => Details#router_grpc_registry_definition_details_internal.service,
-        method => Details#router_grpc_registry_definition_details_internal.method
+        service => Details#router_grpc_registry_definition_internal.service,
+        method => Details#router_grpc_registry_definition_internal.method
       }}),
       {ok, Pid} = Module:start_link(),
       {
@@ -163,7 +159,7 @@ decode_data(?compressed_data(Len, _Data, _Rest), _Definition) ->
 
 decode_data(
   ?non_compressed_data(Len, Data, Rest),
-  #router_grpc_registry_definition_details_internal{definition = Definition, input = Input}
+  #router_grpc_registry_definition_internal{definition = Definition, input = Input}
 ) ->
   try Definition:decode_msg(Data, Input) of
     Pdu -> {ok, {Pdu, Rest}}
@@ -176,7 +172,7 @@ decode_data(_Packet, _Definition) ->
 
 
 
-encode_data(Pdu, #router_grpc_registry_definition_details_internal{definition = Definition, output = Output}) ->
+encode_data(Pdu, #router_grpc_registry_definition_internal{definition = Definition, output = Output}) ->
   try Definition:encode_msg(Pdu, Output) of
     Data ->
       Len = byte_size(Data),
@@ -250,7 +246,7 @@ data_commands(Data, ServerFin) ->
 
 
 handle_grpc_pdu(Pdu, #state{
-  registry_details = #router_grpc_registry_definition_details_internal{
+  registry_details = #router_grpc_registry_definition_internal{
     module = Module, function = Function
   },
   handler_pid = Pid

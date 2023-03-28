@@ -1,12 +1,7 @@
--record(router_grpc_registry_definition, {
-  id :: {binary(), binary()},
-  details :: router_grpc_registry:details()
-}).
-
--record(router_grpc_registry_definition_details_internal, {
+-record(router_grpc_registry_definition_internal, {
   definition :: atom(),
-  service :: binary(),
-  method :: binary(),
+  service :: router_grpc_registry:service_name(),
+  method :: router_grpc_registry:method_name(),
   module :: atom(),
   function :: atom(),
   input :: atom(),
@@ -16,14 +11,11 @@
   opts :: list()
 }).
 
--define(details_type_stateless, stateless).
--define(details_type_stateful, stateful).
-
--record(router_grpc_registry_definition_details_external, {
-  type = ?details_type_stateless :: ?details_type_stateless | ?details_type_stateful,
-  service :: binary(),
-  method :: binary(),
-  maintenance :: boolean(),
-  host :: binary(),
-  port :: 1..65535
+-record(router_grpc_registry_definition_external, {
+  id :: router_grpc_registry:service_ets_key(),
+  type :: router_grpc_registry:service_type(),
+  service :: router_grpc_registry:service_name(),
+  methods :: [router_grpc_registry:method_name(), ...],
+  host :: router_grpc_registry:endpoint_host(),
+  port :: router_grpc_registry:endpoint_port()
 }).

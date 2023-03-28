@@ -171,7 +171,7 @@ init([]) ->
 
 
 handle_call(?call_register_virtual_service(Pdu), _GenReplyTo, S0) ->
-  case call_register_virtual_service_map_validate(Pdu) of
+  case call_register_virtual_service_validate(Pdu) of
     ok ->
       ?l_debug(#{
         text => "Virtual service registered", what => call_register_virtual_service,
@@ -195,8 +195,13 @@ handle_call(?call_enable_virtual_service_maintenance(_Pdu), _GenReplyTo, S0) ->
 handle_call(?call_disable_virtual_service_maintenance(_Pdu), _GenReplyTo, S0) ->
   {reply, {ok, {reply_fin, #'lg.service.router.DisableVirtualServiceMaintenanceRs'{}}}, S0};
 
-handle_call(?call_list_virtual_services(_Pdu), _GenReplyTo, S0) ->
-  {reply, {ok, {reply_fin, #'lg.service.router.ListVirtualServicesRs'{}}}, S0};
+handle_call(?call_list_virtual_services(Pdu), _GenReplyTo, S0) ->
+  case call_list_virtual_services_validate(Pdu) of
+    {ok, RetPdu} ->
+      {reply, {ok, {reply_fin, RetPdu}}, S0};
+    {error, Trailers} ->
+      {reply, {error, {grpc_error, ?grpc_code_invalid_argument, ?grpc_message_invalid_argument_payload, Trailers}}, S0}
+  end;
 
 handle_call(?call_control_stream(_Pdu), _GenReplyTo, S0) ->
   {reply, {ok, wait}, S0};
@@ -233,7 +238,7 @@ code_change(_OldVsn, S0, _Extra) ->
 
 
 
-call_register_virtual_service_map_validate(
+call_register_virtual_service_validate(
   #'lg.service.router.RegisterVirtualServiceRq'{
     virtual_service = #'lg.core.grpc.VirtualService'{
       service = {stateless, #'lg.core.grpc.VirtualService.StatelessVirtualService'{
@@ -246,46 +251,100 @@ call_register_virtual_service_map_validate(
     }
   }
 ) ->
-  {PackageErrors, Package} = call_register_virtual_service_map_validate_package(Package0),
-  {NameErrors, Name} = call_register_virtual_service_map_validate_name(Name0),
-  {MethodsErrors, Methods} = call_register_virtual_service_map_validate_methods(Methods0),
-  {MaintenanceModeErrors, MaintenanceMode} = call_register_virtual_service_map_validate_maintenance_mode(MaintenanceMode0),
-  {HostErrors, Host} = call_register_virtual_service_map_validate_host(Host0),
-  {PortErrors, Port} = call_register_virtual_service_map_validate_port(Port0),
+  {PackageErrors, Package} = validate_package(Package0),
+  {NameErrors, Name} = validate_name(Name0),
+  {MethodsErrors, Methods} = validate_methods(Methods0),
+  {MaintenanceModeErrors, MaintenanceMode} = validate_maintenance_mode(MaintenanceMode0),
+  {HostErrors, Host} = validate_host(Host0),
+  {PortErrors, Port} = validate_port(Port0),
   ErrorList = [Error || Error <- lists:flatten([
     PackageErrors, NameErrors, MethodsErrors, MaintenanceModeErrors, HostErrors, PortErrors
   ]), Error /= undefined],
   case ErrorList of
     [] ->
-      call_register_virtual_service_generate_details(?details_type_stateless, Package, Name, Methods, MaintenanceMode, Host, Port);
+      ServiceName = <<Package/binary, ".", Name/binary>>,
+      ok = router_grpc_registry:register(stateless, ServiceName, Methods, MaintenanceMode, Host, Port);
     _ ->
       {error, maps:from_list(ErrorList)}
   end.
 
 
 
-call_register_virtual_service_generate_details(Type, Package, Name, Methods, MaintenanceMode, Host, Port) ->
-  DetailsList = [#router_grpc_registry_definition_details_external{
-    type = Type, service = <<Package/binary, ".", Name/binary>>, method = Method,
-    maintenance = MaintenanceMode, host = Host, port = Port
-  } || Method <- Methods],
-  call_register_virtual_service_register(DetailsList).
+call_list_virtual_services_validate(#'lg.service.router.ListVirtualServicesRq'{
+  filter_fq_service_name = FilterFqServiceName0,
+  filter_endpoint = FilterEndpoint0,
+  pagination_request = PaginationRequest0
+}) ->
+  {FilterFqServiceNameErrors, FilterFqServiceName} = validate_filter_fq_service_name(FilterFqServiceName0),
+  {FilterEndpointErrors, {FilterHost, FilterPort}} = validate_filter_endpoint(FilterEndpoint0),
+  {PaginationRequestErrors, PaginationRequest} = validate_pagination_request(PaginationRequest0),
+  ErrorList = [Error || Error <- lists:flatten([
+    FilterFqServiceNameErrors, FilterEndpointErrors, PaginationRequestErrors
+  ]), Error /= undefined],
+  case ErrorList of
+    [] ->
+      call_list_virtual_services_filter(FilterFqServiceName, FilterHost, FilterPort, PaginationRequest);
+    _ ->
+      {error, maps:from_list(ErrorList)}
+  end.
 
 
 
-call_register_virtual_service_register([]) -> ok;
+call_list_virtual_services_filter(FilterFqServiceName, FilterHost, FilterPort, _PaginationRequest) ->
+  {ok, Definitions0} = router_grpc_registry:get_list(),
+  Definitions1 = call_list_virtual_services_filter_fq_service_name(FilterFqServiceName, Definitions0),
+  Definitions2 = call_list_virtual_services_filter_endpoint(FilterHost, FilterPort, Definitions1),
+  Services = lists:map(fun call_list_virtual_services_map/1, Definitions2),
+  {ok, #'lg.service.router.ListVirtualServicesRs'{services = Services}}.
 
-call_register_virtual_service_register([Details | DetailsList]) ->
-  ok = router_grpc_registry:register(Details),
-  call_register_virtual_service_register(DetailsList).
+
+
+%% Filters and maps
 
 
 
-call_register_virtual_service_map_validate_package(<<>>) ->
+call_list_virtual_services_filter_fq_service_name(undefined, Definitions) -> Definitions;
+
+call_list_virtual_services_filter_fq_service_name(FilterFqServiceName, Definitions) ->
+  [
+    Definition || #router_grpc_registry_definition_external{service = ServiceName} = Definition
+    <- Definitions, ServiceName == FilterFqServiceName
+  ].
+
+
+
+call_list_virtual_services_filter_endpoint(undefined, undefined, Definitions) -> Definitions;
+
+call_list_virtual_services_filter_endpoint(FilterHost, FilterPort, Definitions) ->
+  [
+    Definition || #router_grpc_registry_definition_external{host = Host, port = Port} = Definition
+    <- Definitions, Host == FilterHost, Port == FilterPort
+  ].
+
+
+
+call_list_virtual_services_map(#router_grpc_registry_definition_external{
+  type = stateless, service = ServiceName, methods = Methods, host = Host, port = Port
+}) ->
+    #'lg.core.grpc.VirtualService'{
+      service = {stateless, #'lg.core.grpc.VirtualService.StatelessVirtualService'{
+        methods = [#'lg.core.grpc.VirtualService.Method'{name = MethodName} || MethodName <- Methods]
+      }},
+      maintenance_mode_enabled = router_grpc_registry:is_maintenance(ServiceName),
+      endpoint = #'lg.core.network.Endpoint'{host = Host, port = Port}
+    }.
+
+
+
+%% Validators
+
+
+
+validate_package(<<>>) ->
   ?l_dev(#{text => "Empty package"}),
   {{?trailer_package_empty, ?trailer_package_empty_message(<<>>)}, undefined};
 
-call_register_virtual_service_map_validate_package(Package) ->
+validate_package(Package) ->
   case lists:member(Package, router_grpc_registry:restricted_packages()) of
     true ->
       ?l_dev(#{text => "Restricted package"}),
@@ -296,16 +355,16 @@ call_register_virtual_service_map_validate_package(Package) ->
 
 
 
-call_register_virtual_service_map_validate_name(<<>>) ->
+validate_name(<<>>) ->
   ?l_dev(#{text => "Empty name"}),
   {{?trailer_name_empty, ?trailer_name_empty_message(<<>>)}, undefined};
 
-call_register_virtual_service_map_validate_name(Name) ->
+validate_name(Name) ->
   {undefined, Name}.
 
 
 
-call_register_virtual_service_map_validate_methods(Methods) ->
+validate_methods(Methods) ->
   Names = [Name || #'lg.core.grpc.VirtualService.Method'{name = Name} <- Methods],
   case lists:member(<<>>, Names) of
     true ->
@@ -317,25 +376,78 @@ call_register_virtual_service_map_validate_methods(Methods) ->
 
 
 
-call_register_virtual_service_map_validate_maintenance_mode(Boolean) -> {undefined, Boolean}.
+validate_maintenance_mode(Boolean) -> {undefined, Boolean}.
 
 
 
-call_register_virtual_service_map_validate_host(<<>>) ->
+validate_host(<<>>) ->
   ?l_dev(#{text => "Empty host"}),
   {{?trailer_host_empty, ?trailer_host_empty_message(<<>>)}, undefined};
 
-call_register_virtual_service_map_validate_host(Host) ->
+validate_host(Host) ->
   {undefined, Host}.
 
 
 
-call_register_virtual_service_map_validate_port(Port) when Port > 65535; Port =< 0 ->
+validate_port(Port) when Port > 65535; Port =< 0 ->
   ?l_dev(#{text => "Invalid port"}),
   {{?trailer_port_invalid, ?trailer_port_invalid_message(Port)}, undefined};
 
-call_register_virtual_service_map_validate_port(Port) ->
+validate_port(Port) ->
   {undefined, Port}.
+
+
+
+validate_filter_fq_service_name(<<>>) -> {undefined, undefined};
+
+validate_filter_fq_service_name(Filter) -> {undefined, Filter}.
+
+
+
+validate_filter_endpoint(undefined) ->
+  {undefined, {undefined, undefined}};
+
+validate_filter_endpoint(#'lg.core.network.Endpoint'{host = FilterHost0, port = FilterPort0}) ->
+  case {FilterHost0, FilterPort0} of
+    %% Filter disabled
+    {<<>>, 0} ->
+      {undefined, {undefined, undefined}};
+    %% Host empty, port invalid
+    {<<>>, FilterPort} when FilterPort > 65535, FilterPort =< 0 ->
+      {
+        [
+          {?trailer_filter_endpoint_host_empty, ?trailer_filter_endpoint_host_empty_message(<<>>)},
+          {?trailer_filter_endpoint_port_invalid, ?trailer_filter_endpoint_port_invalid_message(FilterPort)}
+        ],
+        {undefined, undefined}
+      };
+    %% Host empty, port valid
+    {<<>>, _FilterPort} ->
+      {
+        {?trailer_filter_endpoint_host_empty, ?trailer_filter_endpoint_host_empty_message(<<>>)},
+        {undefined, undefined}
+      };
+    %% Host valid, port invalid
+    {FilterHost, FilterPort} when FilterHost /= <<>>, FilterPort > 65535, FilterPort =< 0 ->
+      {
+        {?trailer_filter_endpoint_port_invalid, ?trailer_filter_endpoint_port_invalid_message(FilterPort)},
+        {undefined, undefined}
+      };
+    %% Filter enabled
+    {FilterHost, FilterPort} ->
+      {undefined, {FilterHost, FilterPort}}
+  end.
+
+
+
+validate_pagination_request(undefined) ->
+  {undefined, undefined};
+
+validate_pagination_request(_) ->
+  {
+    {?trailer_pagination_request_not_implemented, ?trailer_pagination_request_not_implemented_message(undefined)},
+    undefined
+  }.
 
 
 

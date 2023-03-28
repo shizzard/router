@@ -16,7 +16,7 @@ Check if router fails to register a gRPC virtual service with invalid port.
   [invoke app-start]
 
 [shell request]
-  [progress (register with empty host)]
+  [progress (register with invalid port)]
   [invoke grpc-call-unary ${service-definition} ${request-file-empty} ${response-file-empty} ${service} ${host}]
   [sleep 1]
 

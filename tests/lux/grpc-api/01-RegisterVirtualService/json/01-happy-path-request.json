@@ -4,9 +4,7 @@
       "package": "lg.test.package",
       "name": "StatelessService",
       "methods": [
-        {"name": "MethodOne"},
-        {"name": "MethodTwo"},
-        {"name": "MethodThree"}
+        {"name": "MethodOne"}
       ]
     },
     "endpoint": {
