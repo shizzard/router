@@ -5,21 +5,19 @@ Check if router fails to register a gRPC virtual service with empty or restricte
 [include ../../__common/common.luxinc]
 [include ../../__common/grpc.luxinc]
 [include ../../__common/jq.luxinc]
+[include ../../__router/registry-service.luxinc]
 
-[global service-definition=lg/service/router/registry.proto]
 [global request-file-empty=json/02-empty-package-request.json]
 [global response-file-empty=json/02-empty-package-response.json]
 [global request-file-restricted=json/02-restricted-package-request.json]
 [global response-file-restricted=json/02-restricted-package-response.json]
-[global service=lg.service.router.RegistryService]
-[global method=RegisterVirtualService]
 
 [shell router]
   [invoke app-start]
 
 [shell request]
   [progress (register with empty package)]
-  [invoke grpc-call-unary ${service-definition} ${request-file-empty} ${response-file-empty} ${service} ${method}]
+  [invoke grpc-call-unary ${service-definition} ${request-file-empty} ${response-file-empty} ${service-name} ${method-register}]
   [sleep 1]
 
 [shell response]
@@ -34,7 +32,7 @@ Check if router fails to register a gRPC virtual service with empty or restricte
 
 [shell request]
   [progress (register with restricted package)]
-  [invoke grpc-call-unary ${service-definition} ${request-file-restricted} ${response-file-restricted} ${service} ${method}]
+  [invoke grpc-call-unary ${service-definition} ${request-file-restricted} ${response-file-restricted} ${service-name} ${method-register}]
   [sleep 1]
 
 [shell response]
@@ -48,5 +46,3 @@ Check if router fails to register a gRPC virtual service with empty or restricte
   [invoke jq-check-file-match ${response-file-restricted} .trailer.package_restricted "Virtual service package is restricted: lg.service.router"]
 
 [cleanup]
-  !rm ${response-file-empty}
-  !rm ${response-file-restricted}

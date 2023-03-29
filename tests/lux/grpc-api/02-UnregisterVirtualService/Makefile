@@ -32,5 +32,20 @@ all:
 build:
 
 .PHONY: clean
+TMP_RESPONSE_FILES := $(shell find . -type f -iname "*-response.json")
+TMP_REQUEST_FILES := $(shell \
+	find . -type f -iname "*-request.template.json" -exec \
+	bash -c 'f="$${1%.template*}.json"; [ -e "$$f" ] && echo "$$f"' _ {} \;\
+)
 clean:
 	rm -rf lux_logs router_logs
+ifneq (,$(TMP_REQUEST_FILES))
+	rm -rf $(TMP_REQUEST_FILES)
+endif
+ifneq (,$(TMP_RESPONSE_FILES))
+	rm -rf $(TMP_RESPONSE_FILES)
+endif
+
+%.test:
+	@$(TOOL_LUX) --doc 1 $*.lux
+	$(TOOL_LUX) --html enable $*.lux

@@ -1,0 +1,6 @@
+{
+  "pagination_request": {
+    "page_token": "%PLACEHOLDER%",
+    "page_size": 3
+  }
+}

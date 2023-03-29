@@ -9,4 +9,5 @@
   # Cannot check for exit code here, because evans exits with error in case
   # of an error response, duh.
   # [invoke check-ok]
+  ?${sh-prompt}
 [endmacro]

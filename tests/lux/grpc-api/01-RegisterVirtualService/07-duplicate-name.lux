@@ -1,28 +1,25 @@
 [doc]
-Check if router accepts two gRPC virtual service registrations with the same names and different endpoints
+Check if router accepts two gRPC virtual service registrations with the same names and different endpoints.
 [enddoc]
 
 [include ../../__common/common.luxinc]
 [include ../../__common/grpc.luxinc]
 [include ../../__common/jq.luxinc]
+[include ../../__router/registry-service.luxinc]
 
-[global service-definition=lg/service/router/registry.proto]
 [global request-file-first-register=json/07-first-service-request.json]
 [global response-file-first-register=json/07-first-service-response.json]
 [global request-file-second-register=json/07-second-service-request.json]
 [global response-file-second-register=json/07-second-service-response.json]
 [global request-file-list=json/07-list-request.json]
 [global response-file-list=json/07-list-response.json]
-[global service=lg.service.router.RegistryService]
-[global method-register=RegisterVirtualService]
-[global method-list=ListVirtualServices]
 
 [shell router]
   [invoke app-start]
 
 [shell request]
   [progress (register first service)]
-  [invoke grpc-call-unary ${service-definition} ${request-file-first-register} ${response-file-first-register} ${service} ${method-register}]
+  [invoke grpc-call-unary ${service-definition} ${request-file-first-register} ${response-file-first-register} ${service-name} ${method-register}]
   [sleep 1]
 
 [shell response]
@@ -36,7 +33,7 @@ Check if router accepts two gRPC virtual service registrations with the same nam
 
 [shell request]
   [progress (register second service)]
-  [invoke grpc-call-unary ${service-definition} ${request-file-second-register} ${response-file-second-register} ${service} ${method-register}]
+  [invoke grpc-call-unary ${service-definition} ${request-file-second-register} ${response-file-second-register} ${service-name} ${method-register}]
   [sleep 1]
 
 [shell response]
@@ -50,7 +47,7 @@ Check if router accepts two gRPC virtual service registrations with the same nam
 
 [shell request]
   [progress (list)]
-  [invoke grpc-call-unary ${service-definition} ${request-file-list} ${response-file-list} ${service} ${method-list}]
+  [invoke grpc-call-unary ${service-definition} ${request-file-list} ${response-file-list} ${service-name} ${method-list}]
   [sleep 1]
 
 [shell response]

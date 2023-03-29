@@ -146,9 +146,16 @@ integration-tests: $(RELEASE_TEST_BIN) $(RELEASE_TEST_BIN_CLI)
 ROUTER_DIR_TESTS_LUX := $(ROUTER_DIR_TESTS)/lux
 lux-tests: $(RELEASE_TEST_BIN) $(RELEASE_TEST_BIN_CLI) $(TOOL_LUX)
 	@echo "=====    LUX RUN   ====="
+ifeq (,$(TEST))
 	@$(foreach dir,\
 		$(shell $(TOOL_LUX) --mode=list_dir $(ROUTER_DIR_TESTS_LUX)),\
 		echo; echo " -> TESTCASE $(dir)"; $(MAKE) -C $(dir) build all; echo;)
+else
+	@echo; \
+		echo " -> TESTCASE $(shell dirname $(TEST))"; \
+		$(MAKE) -C $(shell dirname $(TEST)) build $(shell basename $(TEST) | cut -f 1 -d '.').test; \
+		echo;
+endif
 	@echo "=====    LUX END   ====="
 
 .PHONY: lux-clean

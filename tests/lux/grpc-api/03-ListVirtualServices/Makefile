@@ -10,10 +10,10 @@ MAKEFLAGS += --no-builtin-rules
 SHELL := bash
 
 export TEST_ROOT := $(abspath ./)
-include ./*.mk
+-include ./*.mk
 
 JQ := $(shell which jq)
-EVANS = $(shell which evans)
+EVANS := $(shell which evans)
 
 ifeq (, $(JQ))
 $(warning "No jq found, is it installed?")
@@ -32,8 +32,16 @@ all:
 build:
 
 .PHONY: clean
+TMP_RESPONSE_FILES := $(shell find . -type f -iname "*-response.json")
+TMP_REQUEST_FILES := $(shell find . -iname "*.template.json" -type f -exec bash -c 'f="$${1%.template.json}.json"; [ -e "$$f" ] && echo "$$f"' _ {} \;)
 clean:
-	rm -rf lux_logs
+	rm -rf lux_logs router_logs
+ifneq (,$(TMP_REQUEST_FILES))
+	rm -rf $(TMP_REQUEST_FILES)
+endif
+ifneq (,$(TMP_RESPONSE_FILES))
+	rm -rf $(TMP_RESPONSE_FILES)
+endif
 
 %.test:
 	@$(TOOL_LUX) --doc 1 $*.lux

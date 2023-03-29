@@ -32,7 +32,8 @@
 }).
 -type state() :: #state{}.
 
--export_type([]).
+-define(default_page_size, 20).
+-define(max_page_size, 50).
 
 
 
@@ -290,25 +291,37 @@ call_list_virtual_services_validate(#'lg.service.router.ListVirtualServicesRq'{
 }) ->
   {FilterFqServiceNameErrors, FilterFqServiceName} = validate_filter_fq_service_name(FilterFqServiceName0),
   {FilterEndpointErrors, {FilterHost, FilterPort}} = validate_filter_endpoint(FilterEndpoint0),
-  {PaginationRequestErrors, PaginationRequest} = validate_pagination_request(PaginationRequest0),
+  {PaginationRequestErrors, {PageToken, PageSize}} = validate_pagination_request(PaginationRequest0),
   ErrorList = [Error || Error <- lists:flatten([
     FilterFqServiceNameErrors, FilterEndpointErrors, PaginationRequestErrors
   ]), Error /= undefined],
   case ErrorList of
     [] ->
-      call_list_virtual_services_filter(FilterFqServiceName, FilterHost, FilterPort, PaginationRequest);
+      call_list_virtual_services_list(FilterFqServiceName, FilterHost, FilterPort, PageToken, PageSize);
     _ ->
       {error, maps:from_list(ErrorList)}
   end.
 
 
 
-call_list_virtual_services_filter(FilterFqServiceName, FilterHost, FilterPort, _PaginationRequest) ->
-  {ok, Definitions0} = router_grpc_registry:get_list(),
-  Definitions1 = call_list_virtual_services_filter_fq_service_name(FilterFqServiceName, Definitions0),
-  Definitions2 = call_list_virtual_services_filter_endpoint(FilterHost, FilterPort, Definitions1),
-  Services = lists:map(fun call_list_virtual_services_map/1, Definitions2),
-  {ok, #'lg.service.router.ListVirtualServicesRs'{services = Services}}.
+call_list_virtual_services_list(FilterFqServiceName, FilterHost, FilterPort, PageToken, PageSize) ->
+  Filters = maps:from_list(lists:flatten([
+    case FilterFqServiceName of undefined -> []; _ -> {filter_fq_service_name, FilterFqServiceName} end,
+    case {FilterHost, FilterPort} of {undefined, undefined} -> []; _ -> {filter_endpoint, {FilterHost, FilterPort}} end
+  ])),
+  case router_grpc_registry:get_list(Filters, PageToken, PageSize) of
+    {ok, {Definitions, NextPageToken}} ->
+      Services = lists:map(fun call_list_virtual_services_map/1, Definitions),
+      PaginationRs = case NextPageToken of
+        undefined -> undefined;
+        _ -> #'lg.core.trait.PaginationRs'{next_page_token = NextPageToken}
+      end,
+      {ok, #'lg.service.router.ListVirtualServicesRs'{services = Services, pagination_response = PaginationRs}};
+    {error, invalid_token} ->
+      {error, #{
+        ?trailer_pagination_request_page_token_invalid => ?trailer_pagination_request_page_token_invalid_message(PageToken)
+      }}
+  end.
 
 
 
@@ -336,30 +349,6 @@ call_unregister_virtual_service_validate(#'lg.service.router.UnregisterVirtualSe
     _ ->
       {error, maps:from_list(ErrorList)}
   end.
-
-
-
-%% Filters and maps
-
-
-
-call_list_virtual_services_filter_fq_service_name(undefined, Definitions) -> Definitions;
-
-call_list_virtual_services_filter_fq_service_name(FilterFqServiceName, Definitions) ->
-  [
-    Definition || #router_grpc_registry_definition_external{fq_service = FqServiceName} = Definition
-    <- Definitions, FqServiceName == FilterFqServiceName
-  ].
-
-
-
-call_list_virtual_services_filter_endpoint(undefined, undefined, Definitions) -> Definitions;
-
-call_list_virtual_services_filter_endpoint(FilterHost, FilterPort, Definitions) ->
-  [
-    Definition || #router_grpc_registry_definition_external{host = Host, port = Port} = Definition
-    <- Definitions, Host == FilterHost, Port == FilterPort
-  ].
 
 
 
@@ -454,9 +443,11 @@ validate_filter_endpoint(#'lg.core.network.Endpoint'{host = FilterHost0, port = 
   case {FilterHost0, FilterPort0} of
     %% Filter disabled
     {<<>>, 0} ->
+      ?l_dev(#{details => #{host => FilterHost0, port => FilterPort0}}),
       {undefined, {undefined, undefined}};
     %% Host empty, port invalid
-    {<<>>, FilterPort} when FilterPort > 65535, FilterPort =< 0 ->
+    {<<>>, FilterPort} when FilterPort > 65535 orelse FilterPort =< 0 ->
+      ?l_dev(#{details => #{host => FilterHost0, port => FilterPort0}}),
       {
         [
           {?trailer_filter_endpoint_host_empty, ?trailer_filter_endpoint_host_empty_message(<<>>)},
@@ -466,31 +457,50 @@ validate_filter_endpoint(#'lg.core.network.Endpoint'{host = FilterHost0, port = 
       };
     %% Host empty, port valid
     {<<>>, _FilterPort} ->
+      ?l_dev(#{details => #{host => FilterHost0, port => FilterPort0}}),
       {
         {?trailer_filter_endpoint_host_empty, ?trailer_filter_endpoint_host_empty_message(<<>>)},
         {undefined, undefined}
       };
     %% Host valid, port invalid
-    {FilterHost, FilterPort} when FilterHost /= <<>>, FilterPort > 65535, FilterPort =< 0 ->
+    {FilterHost, FilterPort} when FilterHost /= <<>>, (FilterPort > 65535 orelse FilterPort =< 0) ->
+      ?l_dev(#{details => #{host => FilterHost0, port => FilterPort0}}),
       {
         {?trailer_filter_endpoint_port_invalid, ?trailer_filter_endpoint_port_invalid_message(FilterPort)},
         {undefined, undefined}
       };
     %% Filter enabled
     {FilterHost, FilterPort} ->
+      ?l_dev(#{details => #{host => FilterHost0, port => FilterPort0}}),
       {undefined, {FilterHost, FilterPort}}
   end.
 
 
 
 validate_pagination_request(undefined) ->
-  {undefined, undefined};
+  {undefined, {undefined, ?default_page_size}};
 
-validate_pagination_request(_) ->
-  {
-    {?trailer_pagination_request_not_implemented, ?trailer_pagination_request_not_implemented_message(undefined)},
-    undefined
-  }.
+validate_pagination_request(#'lg.core.trait.PaginationRq'{
+  page_token = <<>>, page_size = PageSize
+}) ->
+  case PageSize of
+    N when N =< 0 -> {
+      {?trailer_pagination_request_page_size_invalid, ?trailer_pagination_request_page_size_invalid_message(PageSize)},
+      {undefined, ?default_page_size}
+    };
+    N when N > 0 orelse N =< ?max_page_size -> {undefined, {undefined, N}};
+    N when N > ?max_page_size -> {undefined, {undefined, ?max_page_size}}
+  end;
+
+validate_pagination_request(#'lg.core.trait.PaginationRq'{
+  page_token = PageToken, page_size = 0
+}) ->
+  {undefined, {PageToken, ?default_page_size}};
+
+validate_pagination_request(#'lg.core.trait.PaginationRq'{
+  page_token = PageToken, page_size = PageSize
+}) ->
+  {undefined, {PageToken, PageSize}}.
 
 
 

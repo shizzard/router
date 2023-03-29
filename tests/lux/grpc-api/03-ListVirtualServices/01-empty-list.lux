@@ -1,0 +1,30 @@
+[doc]
+Check if router replies with empty list of registered virtual services.
+[enddoc]
+
+[include ../../__common/common.luxinc]
+[include ../../__common/grpc.luxinc]
+[include ../../__common/jq.luxinc]
+[include ../../__router/registry-service.luxinc]
+
+[global request-file-list=json/01-list-request.json]
+[global response-file-list=json/01-list-response.json]
+
+[shell router]
+  [invoke app-start]
+
+[shell request]
+  [progress (list)]
+  [invoke grpc-call-unary ${service-definition} ${request-file-list} ${response-file-list} ${service-name} ${method-list}]
+  [sleep 1]
+
+[shell response]
+  [progress (check response)]
+  [invoke jq-check-file-match ${response-file-list} .header.\"content-type\" "application/grpc+proto"]
+  [invoke jq-check-file-match ${response-file-list} .header.\"grpc-user-agent\" "router/"]
+  [invoke jq-check-file-match ${response-file-list} .status.code OK]
+  [invoke jq-check-file-match ${response-file-list} .status.number 0]
+  [invoke jq-check-file-match ${response-file-list} .messages[0] "{}"]
+  [invoke jq-check-file-match ${response-file-list} .trailer "{}"]
+
+[cleanup]

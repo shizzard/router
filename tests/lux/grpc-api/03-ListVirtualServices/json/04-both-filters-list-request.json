@@ -1,0 +1,7 @@
+{
+  "filter_fq_service_name": "lg.test.package.StatelessServiceA",
+  "filter_endpoint": {
+    "host": "test-1.lg",
+    "port": 8137
+  }
+}

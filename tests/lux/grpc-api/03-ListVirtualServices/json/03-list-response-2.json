@@ -17,21 +17,6 @@
       "services": [
         {
           "endpoint": {
-            "host": "test-1.lg",
-            "port": 8137
-          },
-          "stateless": {
-            "methods": [
-              {
-                "name": "MethodOne"
-              }
-            ],
-            "name": "StatelessService",
-            "package": "lg.test.package"
-          }
-        },
-        {
-          "endpoint": {
             "host": "test-2.lg",
             "port": 8137
           },
@@ -41,7 +26,22 @@
                 "name": "MethodOne"
               }
             ],
-            "name": "StatelessService",
+            "name": "StatelessServiceB",
+            "package": "lg.test.package"
+          }
+        },
+        {
+          "endpoint": {
+            "host": "test-1.lg",
+            "port": 8137
+          },
+          "stateless": {
+            "methods": [
+              {
+                "name": "MethodOne"
+              }
+            ],
+            "name": "StatelessServiceC",
             "package": "lg.test.package"
           }
         }

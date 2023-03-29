@@ -5,22 +5,19 @@ Check if router accepts gRPC virtual service registration.
 [include ../../__common/common.luxinc]
 [include ../../__common/grpc.luxinc]
 [include ../../__common/jq.luxinc]
+[include ../../__router/registry-service.luxinc]
 
-[global service-definition=lg/service/router/registry.proto]
 [global request-file-register=json/01-happy-path-request.json]
 [global response-file-register=json/01-happy-path-response.json]
 [global request-file-list=json/01-list-request.json]
 [global response-file-list=json/01-list-response.json]
-[global service=lg.service.router.RegistryService]
-[global method-request=RegisterVirtualService]
-[global method-list=ListVirtualServices]
 
 [shell router]
   [invoke app-start]
 
 [shell request]
   [progress (register)]
-  [invoke grpc-call-unary ${service-definition} ${request-file-register} ${response-file-register} ${service} ${method-request}]
+  [invoke grpc-call-unary ${service-definition} ${request-file-register} ${response-file-register} ${service-name} ${method-register}]
   [sleep 1]
 
 [shell response]
@@ -34,7 +31,7 @@ Check if router accepts gRPC virtual service registration.
 
 [shell request]
   [progress (list)]
-  [invoke grpc-call-unary ${service-definition} ${request-file-list} ${response-file-list} ${service} ${method-list}]
+  [invoke grpc-call-unary ${service-definition} ${request-file-list} ${response-file-list} ${service-name} ${method-list}]
   [sleep 1]
 
 [shell response]
@@ -51,5 +48,3 @@ Check if router accepts gRPC virtual service registration.
   [invoke jq-check-file-match ${response-file-list} .trailer "{}"]
 
 [cleanup]
-  !rm ${response-file-register}
-  !rm ${response-file-list}

@@ -9,8 +9,8 @@
 -include_lib("typr/include/typr_specs_gen_server.hrl").
 
 -export([
-  restricted_packages/0, register/7, unregister/4, lookup/1, lookup_internal/1, lookup_external/1, get_list/0,
-  is_maintenance/3, set_maintenance/4
+  restricted_packages/0, register/7, unregister/4, lookup/1, lookup_internal/1, lookup_external/1,
+  get_list/1, get_list/2, get_list/3, is_maintenance/3, set_maintenance/4
 ]).
 -export([start_link/2, init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
@@ -160,16 +160,58 @@ lookup_external(Path) ->
 
 
 
--spec get_list() ->
-  typr:ok_return(
-    OkRet :: [definition_external()]
+-spec get_list(PageSize :: pos_integer()) ->
+  typr:generic_return(
+    OkRet :: {List :: [definition_external()], NextPageToken :: router_grpc_pagination:page_token() | undefined},
+    ErrorRet :: invalid_token
   ).
 
-get_list() ->
-  Map = maps:from_list(
-    [{Id, Definition} || #router_grpc_registry_definition_external{id = Id} = Definition <- ets:tab2list(?table_registry)]
+get_list(PageSize) -> get_list(#{}, undefined, PageSize).
+
+
+
+-spec get_list(
+  PageTokenOrFilters :: router_grpc_pagination:page_token() | undefined | #{atom() => term()},
+  PageSize :: pos_integer()
+) ->
+  typr:generic_return(
+    OkRet :: {List :: [definition_external()], NextPageToken :: router_grpc_pagination:page_token() | undefined},
+    ErrorRet :: invalid_token
+  ).
+
+get_list(PageToken, PageSize) when is_binary(PageToken) ->
+  get_list(#{}, PageToken, PageSize);
+
+get_list(Filters, PageSize) when is_map(Filters) ->
+  get_list(Filters, undefined, PageSize).
+
+
+
+-spec get_list(
+  Filters :: #{atom() => term()},
+  PageToken :: router_grpc_pagination:page_token() | undefined,
+  PageSize :: pos_integer()
+) ->
+  typr:generic_return(
+    OkRet :: {List :: [definition_external()], NextPageToken :: router_grpc_pagination:page_token() | undefined},
+    ErrorRet :: invalid_token
+  ).
+
+get_list(Filters, PageToken, PageSize) ->
+  MatchSpecFun = match_spec_fun(
+    maps:get(filter_fq_service_name, Filters, undefined),
+    maps:get(filter_endpoint, Filters, {undefined, undefined})
   ),
-  {ok, maps:values(Map)}.
+  case router_grpc_pagination:get_list(?table_registry, MatchSpecFun, fun key_take/1, PageToken, PageSize) of
+    {ok, {final_page, List}} ->
+      {ok, {List, undefined}};
+    {ok, {page, List, NextPageToken}} ->
+      {ok, {List, NextPageToken}};
+    {ok, empty} ->
+      {ok, {[], undefined}};
+    {error, invalid_token} ->
+      {error, invalid_token}
+  end.
 
 
 
@@ -251,11 +293,7 @@ handle_call(?call_register(Type, Package, ServiceName, Methods, Maintenance, Hos
   {reply, ok, S0};
 
 handle_call(?call_unregister(Type, ServiceName, Host, Port), _GenReplyTo, S0) ->
-  true = ets:delete(S0#state.table_registry, ?table_registry_key(Type, ServiceName, Host, Port)),
-  true = ets:match_delete(S0#state.table_lookup, #router_grpc_registry_definition_external{
-    id = ?table_lookup_key('_'), service = ServiceName, host = Host, port = Port, _ = '_'
-  }),
-  {reply, ok, S0};
+  handle_call_unregister(Type, ServiceName, Host, Port, S0);
 
 handle_call(Unexpected, _GenReplyTo, S0) ->
   ?l_error(#{text => "Unexpected call", what => handle_call, details => Unexpected}),
@@ -286,6 +324,20 @@ code_change(_OldVsn, S0, _Extra) ->
 
 
 %% Internals
+
+
+
+%% This function causes dialyzer error regarding record construction:
+%% > Record construction
+%% > #router_grpc_registry_definition_external{id::{'_'},type::'_',package::'_',fq_service::'_',methods::'_'}
+%% > violates the declared type of ...
+-dialyzer({nowarn_function, [handle_call_unregister/5]}).
+handle_call_unregister(Type, ServiceName, Host, Port, S0) ->
+  true = ets:delete(S0#state.table_registry, ?table_registry_key(Type, ServiceName, Host, Port)),
+  true = ets:match_delete(S0#state.table_lookup, #router_grpc_registry_definition_external{
+    id = ?table_lookup_key('_'), service = ServiceName, host = Host, port = Port, _ = '_'
+  }),
+  {reply, ok, S0}.
 
 
 
@@ -375,3 +427,50 @@ atom_snake_case(Name) ->
   Snaked1 = string:replace(Snaked, ".", "_", all),
   Snaked2 = string:replace(Snaked1, "__", "_", all),
   list_to_atom(string:to_lower(unicode:characters_to_list(Snaked2))).
+
+
+
+%% e.g.
+%% ets:fun2ms(
+%%   fun(#router_grpc_registry_definition_external{id = Id, _ = '_'} = Obj)
+%%   when Id >= Key ->
+%%     Obj
+%%   end
+%% ).
+match_spec_fun(undefined, {undefined, undefined}) ->
+  fun(Key) ->
+    [{{'_','$1','_','_','_','_','_','_','_'}, [
+      {'>=','$1', {const,Key}}
+    ], ['$_']}]
+  end;
+
+match_spec_fun(FqFilter, {undefined, undefined}) ->
+  fun(Key) ->
+    [{{'_','$1','_','_','_','$2','_','_','_'}, [
+      {'>=','$1', {const,Key}},
+      {'==','$2', {const,FqFilter}}
+    ], ['$_']}]
+  end;
+
+match_spec_fun(undefined, {Host, Port}) ->
+  fun(Key) ->
+    [{{'_','$1','_','_','_','_','_','$2','$3'}, [
+      {'>=','$1', {const,Key}},
+      {'==','$2', {const,Host}},
+      {'==','$3', {const,Port}}
+    ], ['$_']}]
+  end;
+
+match_spec_fun(FqFilter, {Host, Port}) ->
+  fun(Key) ->
+    [{{'_','$1','_','_','_','$2','_','$3','$4'}, [
+      {'>=','$1', {const,Key}},
+      {'==','$2', {const,FqFilter}},
+      {'==','$3', {const,Host}},
+      {'==','$4', {const,Port}}
+    ], ['$_']}]
+  end.
+
+
+
+key_take(#router_grpc_registry_definition_external{id = Id}) -> Id.

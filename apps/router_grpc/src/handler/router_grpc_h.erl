@@ -10,11 +10,12 @@
   stream_id :: cowboy_stream:streamid() | undefined,
   req :: cowboy_req:req() | undefined,
   registry_details :: router_grpc_registry:details() | undefined,
-  is_client_fin :: boolean(),
+  is_client_fin = false :: boolean(),
   is_server_fin = false :: boolean(),
   handler_pid :: term() | undefined,
   data_buffer = <<>> :: binary()
 }).
+-type state() :: #state{}.
 
 -define(fin_to_bool(Fin), case Fin of fin -> true; nofin -> false end).
 -define(bool_to_fin(Bool), case Bool of true -> fin; false -> nofin end).
@@ -65,7 +66,15 @@
 
 
 
--spec init(term(), term(), term()) -> ok.
+-spec init(
+  StreamId :: cowboy_stream:streamid(),
+  Req :: cowboy_req:req(),
+  Opts :: cowboy:opts()
+) ->
+  Ret :: {
+    Commands :: cowboy_stream:commands(),
+    State :: state()
+  }.
 
 init(StreamId, #{
   version := 'HTTP/2',

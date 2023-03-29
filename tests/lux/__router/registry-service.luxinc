@@ -1,0 +1,6 @@
+[global service-definition=lg/service/router/registry.proto]
+[global service-name=lg.service.router.RegistryService]
+
+[global method-register=RegisterVirtualService]
+[global method-unregister=RegisterVirtualService]
+[global method-list=ListVirtualServices]

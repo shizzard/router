@@ -5,19 +5,17 @@ Check if router fails to register a gRPC virtual service with empty method.
 [include ../../__common/common.luxinc]
 [include ../../__common/grpc.luxinc]
 [include ../../__common/jq.luxinc]
+[include ../../__router/registry-service.luxinc]
 
-[global service-definition=lg/service/router/registry.proto]
 [global request-file-empty=json/04-empty-method-request.json]
 [global response-file-empty=json/04-empty-method-response.json]
-[global service=lg.service.router.RegistryService]
-[global method=RegisterVirtualService]
 
 [shell router]
   [invoke app-start]
 
 [shell request]
   [progress (register with empty method)]
-  [invoke grpc-call-unary ${service-definition} ${request-file-empty} ${response-file-empty} ${service} ${method}]
+  [invoke grpc-call-unary ${service-definition} ${request-file-empty} ${response-file-empty} ${service-name} ${method-register}]
   [sleep 1]
 
 [shell response]
@@ -31,4 +29,3 @@ Check if router fails to register a gRPC virtual service with empty method.
   [invoke jq-check-file-match ${response-file-empty} .trailer.method_empty "Virtual service method cannot be empty"]
 
 [cleanup]
-  !rm ${response-file-empty}

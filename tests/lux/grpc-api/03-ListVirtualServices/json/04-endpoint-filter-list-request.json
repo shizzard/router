@@ -1,0 +1,6 @@
+{
+  "filter_endpoint": {
+    "host": "test-1.lg",
+    "port": 8137
+  }
+}
