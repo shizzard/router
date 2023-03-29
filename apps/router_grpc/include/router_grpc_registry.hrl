@@ -12,9 +12,11 @@
 }).
 
 -record(router_grpc_registry_definition_external, {
-  id :: router_grpc_registry:service_ets_key(),
+  id :: router_grpc_registry:table_registry_key() | router_grpc_registry:table_lookup_key(),
   type :: router_grpc_registry:service_type(),
+  package :: router_grpc_registry:service_package(),
   service :: router_grpc_registry:service_name(),
+  fq_service :: router_grpc_registry:fq_service_name(),
   methods :: [router_grpc_registry:method_name(), ...],
   host :: router_grpc_registry:endpoint_host(),
   port :: router_grpc_registry:endpoint_port()

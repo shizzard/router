@@ -275,8 +275,7 @@ call_register_virtual_service_validate(
   ]), Error /= undefined],
   case ErrorList of
     [] ->
-      ServiceName = <<Package/binary, ".", Name/binary>>,
-      ok = router_grpc_registry:register(stateless, ServiceName, Methods, MaintenanceMode, Host, Port),
+      ok = router_grpc_registry:register(stateless, Package, Name, Methods, MaintenanceMode, Host, Port),
       {ok, #'lg.service.router.RegisterVirtualServiceRs'{}};
     _ ->
       {error, maps:from_list(ErrorList)}
@@ -348,8 +347,8 @@ call_list_virtual_services_filter_fq_service_name(undefined, Definitions) -> Def
 
 call_list_virtual_services_filter_fq_service_name(FilterFqServiceName, Definitions) ->
   [
-    Definition || #router_grpc_registry_definition_external{service = ServiceName} = Definition
-    <- Definitions, ServiceName == FilterFqServiceName
+    Definition || #router_grpc_registry_definition_external{fq_service = FqServiceName} = Definition
+    <- Definitions, FqServiceName == FilterFqServiceName
   ].
 
 
@@ -365,13 +364,16 @@ call_list_virtual_services_filter_endpoint(FilterHost, FilterPort, Definitions) 
 
 
 call_list_virtual_services_map(#router_grpc_registry_definition_external{
-  type = stateless, service = ServiceName, methods = Methods, host = Host, port = Port
+  type = stateless, package = Package, service = ServiceName,
+  fq_service = FqServiceName, methods = Methods, host = Host, port = Port
 }) ->
     #'lg.core.grpc.VirtualService'{
       service = {stateless, #'lg.core.grpc.VirtualService.StatelessVirtualService'{
+        package = Package,
+        name = ServiceName,
         methods = [#'lg.core.grpc.VirtualService.Method'{name = MethodName} || MethodName <- Methods]
       }},
-      maintenance_mode_enabled = router_grpc_registry:is_maintenance(ServiceName, Host, Port),
+      maintenance_mode_enabled = router_grpc_registry:is_maintenance(FqServiceName, Host, Port),
       endpoint = #'lg.core.network.Endpoint'{host = Host, port = Port}
     }.
 

@@ -9,12 +9,15 @@
 -include_lib("typr/include/typr_specs_gen_server.hrl").
 
 -export([
-  restricted_packages/0, register/6, unregister/4, lookup/1, lookup_internal/1, lookup_external/1, get_list/0,
+  restricted_packages/0, register/7, unregister/4, lookup/1, lookup_internal/1, lookup_external/1, get_list/0,
   is_maintenance/3, set_maintenance/4
 ]).
 -export([start_link/2, init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
--define(service_ets_key(Type, Path, Host, Port), {Type, Path, Host, Port}).
+-define(table_registry, router_grpc_registry_table_registry).
+-define(table_lookup, router_grpc_registry_table_lookup).
+-define(table_registry_key(Type, ServiceName, Host, Port), {Type, ServiceName, Host, Port}).
+-define(table_lookup_key(Path), {Path}).
 -define(persistent_term_key_internal(Path), {?MODULE, persistent_term_key_internal, Path}).
 -define(
   persistent_term_key_external_maintenance(ServiceName, Host, Port),
@@ -23,20 +26,27 @@
 -define(restricted_packages, [<<"lg.service.router">>]).
 
 -record(state, {
-  ets :: ets:tid()
+  table_registry :: ets:tid(),
+  table_lookup :: ets:tid()
 }).
 -type state() :: #state{}.
 
--type service_ets_key() :: ?service_ets_key(service_type(), service_name(), endpoint_host(), endpoint_port()).
+-type table_registry_key() :: ?table_registry_key(
+  Type :: service_type(), ServiceName :: service_name(), Host :: endpoint_host(), Port :: endpoint_port()
+).
+-type table_lookup_key() :: ?table_lookup_key(Path :: service_path()).
 -type service_type() :: stateless | stateful.
+-type service_package() :: binary().
 -type service_name() :: binary().
+-type fq_service_name() :: binary().
+-type service_path() :: binary().
 -type method_name() :: binary().
 -type service_maintenance() :: boolean().
 -type endpoint_host() :: binary().
 -type endpoint_port() :: 0..65535.
 -export_type([
-  service_ets_key/0, service_type/0, service_name/0, method_name/0, service_maintenance/0,
-  endpoint_host/0, endpoint_port/0
+  table_registry_key/0, table_lookup_key/0, service_type/0, service_package/0, service_name/0,
+  fq_service_name/0, service_path/0, method_name/0, service_maintenance/0, endpoint_host/0, endpoint_port/0
 ]).
 
 -type definition() :: definition_internal() | definition_external().
@@ -49,8 +59,8 @@
 %% Messages
 
 -define(
-  call_register(Type, ServiceName, Methods, Maintenance, Host, Port),
-  {call_register, Type, ServiceName, Methods, Maintenance, Host, Port}
+  call_register(Type, Package, ServiceName, Methods, Maintenance, Host, Port),
+  {call_register, Type, Package, ServiceName, Methods, Maintenance, Host, Port}
 ).
 -define(
   call_unregister(Type, ServiceName, Host, Port),
@@ -77,6 +87,7 @@ restricted_packages() -> ?restricted_packages.
 
 -spec register(
   Type :: service_type(),
+  Package :: service_package(),
   ServiceName :: service_name(),
   Methods :: [method_name(), ...],
   Maintenance :: service_maintenance(),
@@ -87,8 +98,8 @@ restricted_packages() -> ?restricted_packages.
     ErrorRet :: term()
   ).
 
-register(Type, ServiceName, Methods, Maintenance, Host, Port) ->
-  gen_server:call(?MODULE, ?call_register(Type, ServiceName, Methods, Maintenance, Host, Port)).
+register(Type, Package, ServiceName, Methods, Maintenance, Host, Port) ->
+  gen_server:call(?MODULE, ?call_register(Type, Package, ServiceName, Methods, Maintenance, Host, Port)).
 
 
 
@@ -142,11 +153,8 @@ lookup_internal(Path) ->
   ).
 
 lookup_external(Path) ->
-  case ets:match(?MODULE, #router_grpc_registry_definition_external{
-    id = ?service_ets_key('_', Path, '_', '_'),
-    type = '_', service = '_', methods = '_', host = '_', port = '_'
-  }, 1) of
-    '$end_of_table' -> {error, undefined};
+  case ets:lookup(?table_lookup, ?table_lookup_key(Path)) of
+    [] -> {error, undefined};
     [Definition] -> {ok, Definition}
   end.
 
@@ -159,7 +167,7 @@ lookup_external(Path) ->
 
 get_list() ->
   Map = maps:from_list(
-    [{Id, Definition} || #router_grpc_registry_definition_external{id = Id} = Definition <- ets:tab2list(?MODULE)]
+    [{Id, Definition} || #router_grpc_registry_definition_external{id = Id} = Definition <- ets:tab2list(?table_registry)]
   ),
   {ok, maps:values(Map)}.
 
@@ -179,7 +187,7 @@ is_maintenance(ServiceName, Host, Port) ->
   Ret :: typr:ok_return().
 
 set_maintenance(ServiceName, Host, Port, true) ->
-  persistent_term:set(?persistent_term_key_external_maintenance(ServiceName, Host, Port), true);
+  persistent_term:put(?persistent_term_key_external_maintenance(ServiceName, Host, Port), true);
 
 set_maintenance(ServiceName, Host, Port, false) ->
   _ = persistent_term:erase(?persistent_term_key_external_maintenance(ServiceName, Host, Port)),
@@ -201,8 +209,12 @@ init({ServiceDefinitions, ServiceMap}) ->
   ok = init_prometheus_metrics(),
 
   S0 = #state{
-    ets = ets:new(?MODULE,
+    table_registry = ets:new(?table_registry,
       [ordered_set, protected, named_table, {read_concurrency, true},
+      {keypos, #router_grpc_registry_definition_external.id}]
+    ),
+    table_lookup = ets:new(?table_lookup,
+      [duplicate_bag, protected, named_table, {read_concurrency, true},
       {keypos, #router_grpc_registry_definition_external.id}]
     )
   },
@@ -215,25 +227,33 @@ init({ServiceDefinitions, ServiceMap}) ->
 
 
 
-handle_call(?call_register(Type, ServiceName, Methods, Maintenance, Host, Port), _GenReplyTo, S0) ->
+handle_call(?call_register(Type, Package, ServiceName, Methods, Maintenance, Host, Port), _GenReplyTo, S0) ->
+  FqServiceName = <<Package/binary, ".", ServiceName/binary>>,
   lists:foreach(fun(MethodName) ->
-    Path = <<"/", ServiceName/binary, "/", MethodName/binary>>,
-    Id = ?service_ets_key(Type, Path, Host, Port),
+    Path = <<"/", FqServiceName/binary, "/", MethodName/binary>>,
+    LookupId = ?table_lookup_key(Path),
     Definition = #router_grpc_registry_definition_external{
-      id = Id, type = Type, service = ServiceName, methods = Methods, host = Host, port = Port
+      id = LookupId, type = Type, package = Package, service = ServiceName,
+      fq_service = FqServiceName, methods = Methods, host = Host, port = Port
     },
-    ets:insert(S0#state.ets, Definition)
+    ets:insert(S0#state.table_lookup, Definition)
   end, Methods),
+  RegistryId = ?table_registry_key(Type, ServiceName, Host, Port),
+  RegistryDefinition = #router_grpc_registry_definition_external{
+    id = RegistryId, type = Type, package = Package, service = ServiceName,
+    fq_service = FqServiceName, methods = Methods, host = Host, port = Port
+  },
+  ets:insert(S0#state.table_registry, RegistryDefinition),
   case Maintenance of
-    true -> persistent_term:put(?persistent_term_key_external_maintenance(ServiceName, Host, Port), Maintenance);
+    true -> set_maintenance(ServiceName, Host, Port, Maintenance);
     false -> ok
   end,
   {reply, ok, S0};
 
 handle_call(?call_unregister(Type, ServiceName, Host, Port), _GenReplyTo, S0) ->
-  ets:match_delete(?MODULE, #router_grpc_registry_definition_external{
-    id = ?service_ets_key(Type, '_', Host, Port),
-    type = '_', service = ServiceName, methods = '_', host = '_', port = '_'
+  true = ets:delete(S0#state.table_registry, ?table_registry_key(Type, ServiceName, Host, Port)),
+  true = ets:match_delete(S0#state.table_lookup, #router_grpc_registry_definition_external{
+    id = ?table_lookup_key('_'), service = ServiceName, host = Host, port = Port, _ = '_'
   }),
   {reply, ok, S0};
 

@@ -1,5 +1,5 @@
 [doc]
-Check if router fails to register a gRPC virtual service with empty or restricted package.
+Check if router fails to unregister a gRPC virtual service with empty or restricted package.
 [enddoc]
 
 [include ../../__common/common.luxinc]

@@ -46,6 +46,8 @@ Check if router accepts gRPC virtual service registration.
   [invoke jq-check-file-match ${response-file-list} .header.\"grpc-user-agent\" "router/"]
   [invoke jq-check-file-match ${response-file-list} .status.code OK]
   [invoke jq-check-file-match ${response-file-list} .status.number 0]
+  [invoke jq-check-file-match ${response-file-list} .messages[0].services[0].stateless.package lg.test.package]
+  [invoke jq-check-file-match ${response-file-list} .messages[0].services[0].stateless.name StatelessService]
   [invoke jq-check-file-match ${response-file-list} .messages[0].services[0].stateless.methods[0].name MethodOne]
   [invoke jq-check-file-match ${response-file-list} .messages[0].services[0].endpoint.host "test.lg"]
   [invoke jq-check-file-match ${response-file-list} .messages[0].services[0].endpoint.port 8137]
