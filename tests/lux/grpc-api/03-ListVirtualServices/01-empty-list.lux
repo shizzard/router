@@ -16,7 +16,6 @@ Check if router replies with empty list of registered virtual services.
 [shell request]
   [progress (list)]
   [invoke grpc-call-unary ${service-definition} ${request-file-list} ${response-file-list} ${service-name} ${method-list}]
-  [sleep 1]
 
 [shell response]
   [progress (check response)]

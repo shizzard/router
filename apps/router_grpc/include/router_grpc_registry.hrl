@@ -18,6 +18,7 @@
   service :: router_grpc_registry:service_name(),
   fq_service :: router_grpc_registry:fq_service_name(),
   methods :: [router_grpc_registry:method_name(), ...],
+  cmp = 'PREEMPTIVE' :: registry_definitions:'lg.core.grpc.VirtualService.StatefulVirtualService.ConflictManagementPolicy'(),
   host :: router_grpc_registry:endpoint_host(),
   port :: router_grpc_registry:endpoint_port()
 }).

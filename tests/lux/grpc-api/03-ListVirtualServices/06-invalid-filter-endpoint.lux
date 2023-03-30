@@ -20,7 +20,6 @@ Check if router fails to list registered virtual services with invalid endpoint 
 [shell request]
   [progress (list with invalid host)]
   [invoke grpc-call-unary ${service-definition} ${request-file-invalid-host-list} ${response-file-invalid-host-list} ${service-name} ${method-list}]
-  [sleep 1]
 
 [shell response]
   [progress (check response)]
@@ -35,7 +34,6 @@ Check if router fails to list registered virtual services with invalid endpoint 
 [shell request]
   [progress (list with invalid port)]
   [invoke grpc-call-unary ${service-definition} ${request-file-invalid-port-list} ${response-file-invalid-port-list} ${service-name} ${method-list}]
-  [sleep 1]
 
 [shell response]
   [progress (check response)]
@@ -50,7 +48,6 @@ Check if router fails to list registered virtual services with invalid endpoint 
 [shell request]
   [progress (list with invalid endpoint filter)]
   [invoke grpc-call-unary ${service-definition} ${request-file-invalid-filter-list} ${response-file-invalid-filter-list} ${service-name} ${method-list}]
-  [sleep 1]
 
 [shell response]
   [progress (check response)]

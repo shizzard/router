@@ -34,12 +34,10 @@ Check if router replies with a filtered list of registered virtual services.
   [invoke grpc-call-unary ${service-definition} ${request-file-service-B1-register} ${response-file-service-B1-register} ${service-name} ${method-register}]
   [invoke grpc-call-unary ${service-definition} ${request-file-service-B2-register} ${response-file-service-B2-register} ${service-name} ${method-register}]
   [invoke grpc-call-unary ${service-definition} ${request-file-service-C1-register} ${response-file-service-C1-register} ${service-name} ${method-register}]
-  [sleep 1]
 
 [shell request]
   [progress (list)]
   [invoke grpc-call-unary ${service-definition} ${request-file-fq-service-name-filter-list} ${response-file-fq-service-name-filter-list} ${service-name} ${method-list}]
-  [sleep 1]
 
 [shell response]
   [progress (check response)]
@@ -64,7 +62,6 @@ Check if router replies with a filtered list of registered virtual services.
 [shell request]
   [progress (list)]
   [invoke grpc-call-unary ${service-definition} ${request-file-endpoint-filter-list} ${response-file-endpoint-filter-list} ${service-name} ${method-list}]
-  [sleep 1]
 
 [shell response]
   [progress (check response)]
@@ -94,7 +91,6 @@ Check if router replies with a filtered list of registered virtual services.
 [shell request]
   [progress (list)]
   [invoke grpc-call-unary ${service-definition} ${request-file-both-filters-list} ${response-file-both-filters-list} ${service-name} ${method-list}]
-  [sleep 1]
 
 [shell response]
   [progress (check response)]

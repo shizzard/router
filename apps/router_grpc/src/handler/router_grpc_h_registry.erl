@@ -127,6 +127,7 @@ disable_virtual_service_maintenance(Pid, Pdu) ->
   ).
 
 list_virtual_services(Pid, Pdu) ->
+  %% df: do we really need a call here?
   gen_server:call(Pid, ?call_list_virtual_services(Pdu)).
 
 
@@ -280,6 +281,38 @@ call_register_virtual_service_validate(
       {ok, #'lg.service.router.RegisterVirtualServiceRs'{}};
     _ ->
       {error, maps:from_list(ErrorList)}
+  end;
+
+call_register_virtual_service_validate(
+  #'lg.service.router.RegisterVirtualServiceRq'{
+    virtual_service = #'lg.core.grpc.VirtualService'{
+      service = {stateful, #'lg.core.grpc.VirtualService.StatefulVirtualService'{
+        package = Package0,
+        name = Name0,
+        methods = Methods0,
+        cmp = Cmp0
+      }},
+      maintenance_mode_enabled = MaintenanceMode0,
+      endpoint = #'lg.core.network.Endpoint'{host = Host0, port = Port0}
+    }
+  }
+) ->
+  {PackageErrors, Package} = validate_package(Package0),
+  {NameErrors, Name} = validate_name(Name0),
+  {MethodsErrors, Methods} = validate_methods(Methods0),
+  {CmpErrors, Cmp} = validate_cmp(Cmp0),
+  {MaintenanceModeErrors, MaintenanceMode} = validate_maintenance_mode(MaintenanceMode0),
+  {HostErrors, Host} = validate_host(Host0),
+  {PortErrors, Port} = validate_port(Port0),
+  ErrorList = [Error || Error <- lists:flatten([
+    PackageErrors, NameErrors, MethodsErrors, CmpErrors, MaintenanceModeErrors, HostErrors, PortErrors
+  ]), Error /= undefined],
+  case ErrorList of
+    [] ->
+      ok = router_grpc_registry:register(stateful, Package, Name, Methods, Cmp, MaintenanceMode, Host, Port),
+      {ok, #'lg.service.router.RegisterVirtualServiceRs'{}};
+    _ ->
+      {error, maps:from_list(ErrorList)}
   end.
 
 
@@ -364,6 +397,21 @@ call_list_virtual_services_map(#router_grpc_registry_definition_external{
       }},
       maintenance_mode_enabled = router_grpc_registry:is_maintenance(FqServiceName, Host, Port),
       endpoint = #'lg.core.network.Endpoint'{host = Host, port = Port}
+    };
+
+call_list_virtual_services_map(#router_grpc_registry_definition_external{
+  type = stateful, package = Package, service = ServiceName,
+  fq_service = FqServiceName, methods = Methods, cmp = Cmp, host = Host, port = Port
+}) ->
+    #'lg.core.grpc.VirtualService'{
+      service = {stateful, #'lg.core.grpc.VirtualService.StatefulVirtualService'{
+        package = Package,
+        name = ServiceName,
+        methods = [#'lg.core.grpc.VirtualService.Method'{name = MethodName} || MethodName <- Methods],
+        cmp = Cmp
+      }},
+      maintenance_mode_enabled = router_grpc_registry:is_maintenance(FqServiceName, Host, Port),
+      endpoint = #'lg.core.network.Endpoint'{host = Host, port = Port}
     }.
 
 
@@ -405,6 +453,10 @@ validate_methods(Methods) ->
     false ->
       {undefined, Names}
   end.
+
+
+
+validate_cmp(Cmp) -> {undefined, Cmp}.
 
 
 

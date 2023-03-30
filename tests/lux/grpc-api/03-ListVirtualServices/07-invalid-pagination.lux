@@ -18,7 +18,6 @@ Check if router fails to list registered virtual services with invalid paginatio
 [shell request]
   [progress (list with invalid page size)]
   [invoke grpc-call-unary ${service-definition} ${request-file-invalid-page-size-list} ${response-file-invalid-page-size-list} ${service-name} ${method-list}]
-  [sleep 1]
 
 [shell response]
   [progress (check response)]
@@ -33,7 +32,6 @@ Check if router fails to list registered virtual services with invalid paginatio
 [shell request]
   [progress (list with invalid page token)]
   [invoke grpc-call-unary ${service-definition} ${request-file-invalid-token-list} ${response-file-invalid-token-list} ${service-name} ${method-list}]
-  [sleep 1]
 
 [shell response]
   [progress (check response)]

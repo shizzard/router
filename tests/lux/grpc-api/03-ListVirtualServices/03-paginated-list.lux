@@ -33,12 +33,10 @@ Check if router replies with a paginated list of registered virtual services.
   [invoke grpc-call-unary ${service-definition} ${request-file-service-B1-register} ${response-file-service-B1-register} ${service-name} ${method-register}]
   [invoke grpc-call-unary ${service-definition} ${request-file-service-B2-register} ${response-file-service-B2-register} ${service-name} ${method-register}]
   [invoke grpc-call-unary ${service-definition} ${request-file-service-C1-register} ${response-file-service-C1-register} ${service-name} ${method-register}]
-  [sleep 1]
 
 [shell request]
   [progress (list first page)]
   [invoke grpc-call-unary ${service-definition} ${request-file-list-1} ${response-file-list-1} ${service-name} ${method-list}]
-  [sleep 1]
 
 [shell response]
   [progress (check response)]
@@ -65,15 +63,16 @@ Check if router replies with a paginated list of registered virtual services.
   [invoke jq-check-file ${response-file-list-1} .messages[0].paginationResponse.nextPageToken]
   ?^([A-Za-z0-9=/]+)$
   [global next-page-token=$1]
+  ?${sh-prompt}
   [progress (next-page-token ${next-page-token})]
   [invoke jq-check-file-match ${response-file-list-1} .trailer "{}"]
 
 [shell request]
   [progress (prepare list second page request)]
   !sed 's~%PLACEHOLDER%~${next-page-token}~' ${template-file-list-2} > ${request-file-list-2}
+  ?${sh-prompt}
   [progress (list second page)]
   [invoke grpc-call-unary ${service-definition} ${request-file-list-2} ${response-file-list-2} ${service-name} ${method-list}]
-  [sleep 1]
 
 
 [shell response]

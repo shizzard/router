@@ -9,7 +9,7 @@
 -include_lib("typr/include/typr_specs_gen_server.hrl").
 
 -export([
-  restricted_packages/0, register/7, unregister/4, lookup/1, lookup_internal/1, lookup_external/1,
+  restricted_packages/0, register/7, register/8, unregister/4, lookup/1, lookup_internal/1, lookup_external/1,
   get_list/1, get_list/2, get_list/3, is_maintenance/3, set_maintenance/4
 ]).
 -export([start_link/2, init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -59,8 +59,12 @@
 %% Messages
 
 -define(
-  call_register(Type, Package, ServiceName, Methods, Maintenance, Host, Port),
-  {call_register, Type, Package, ServiceName, Methods, Maintenance, Host, Port}
+  call_register_stateless(Type, Package, ServiceName, Methods, Maintenance, Host, Port),
+  {call_register_stateless, Type, Package, ServiceName, Methods, Maintenance, Host, Port}
+).
+-define(
+  call_register_stateful(Type, Package, ServiceName, Methods, Cmp, Maintenance, Host, Port),
+  {call_register_stateful, Type, Package, ServiceName, Methods, Cmp, Maintenance, Host, Port}
 ).
 -define(
   call_unregister(Type, ServiceName, Host, Port),
@@ -98,8 +102,27 @@ restricted_packages() -> ?restricted_packages.
     ErrorRet :: term()
   ).
 
-register(Type, Package, ServiceName, Methods, Maintenance, Host, Port) ->
-  gen_server:call(?MODULE, ?call_register(Type, Package, ServiceName, Methods, Maintenance, Host, Port)).
+register(stateless, Package, ServiceName, Methods, Maintenance, Host, Port) ->
+  gen_server:call(?MODULE, ?call_register_stateless(stateless, Package, ServiceName, Methods, Maintenance, Host, Port)).
+
+
+
+-spec register(
+  Type :: service_type(),
+  Package :: service_package(),
+  ServiceName :: service_name(),
+  Methods :: [method_name(), ...],
+  Cmp :: registry_definitions:'lg.core.grpc.VirtualService.StatefulVirtualService.ConflictManagementPolicy'(),
+  Maintenance :: service_maintenance(),
+  Host :: endpoint_host(),
+  Port :: endpoint_port()
+) ->
+  typr:generic_return(
+    ErrorRet :: term()
+  ).
+
+register(stateful, Package, ServiceName, Methods, Cmp, Maintenance, Host, Port) ->
+  gen_server:call(?MODULE, ?call_register_stateful(stateful, Package, ServiceName, Methods, Cmp, Maintenance, Host, Port)).
 
 
 
@@ -269,7 +292,7 @@ init({ServiceDefinitions, ServiceMap}) ->
 
 
 
-handle_call(?call_register(Type, Package, ServiceName, Methods, Maintenance, Host, Port), _GenReplyTo, S0) ->
+handle_call(?call_register_stateless(Type, Package, ServiceName, Methods, Maintenance, Host, Port), _GenReplyTo, S0) ->
   FqServiceName = <<Package/binary, ".", ServiceName/binary>>,
   lists:foreach(fun(MethodName) ->
     Path = <<"/", FqServiceName/binary, "/", MethodName/binary>>,
@@ -284,6 +307,29 @@ handle_call(?call_register(Type, Package, ServiceName, Methods, Maintenance, Hos
   RegistryDefinition = #router_grpc_registry_definition_external{
     id = RegistryId, type = Type, package = Package, service = ServiceName,
     fq_service = FqServiceName, methods = Methods, host = Host, port = Port
+  },
+  ets:insert(S0#state.table_registry, RegistryDefinition),
+  case Maintenance of
+    true -> set_maintenance(ServiceName, Host, Port, Maintenance);
+    false -> ok
+  end,
+  {reply, ok, S0};
+
+handle_call(?call_register_stateful(Type, Package, ServiceName, Methods, Cmp, Maintenance, Host, Port), _GenReplyTo, S0) ->
+  FqServiceName = <<Package/binary, ".", ServiceName/binary>>,
+  lists:foreach(fun(MethodName) ->
+    Path = <<"/", FqServiceName/binary, "/", MethodName/binary>>,
+    LookupId = ?table_lookup_key(Path),
+    Definition = #router_grpc_registry_definition_external{
+      id = LookupId, type = Type, package = Package, service = ServiceName,
+      fq_service = FqServiceName, methods = Methods, cmp = Cmp, host = Host, port = Port
+    },
+    ets:insert(S0#state.table_lookup, Definition)
+  end, Methods),
+  RegistryId = ?table_registry_key(Type, ServiceName, Host, Port),
+  RegistryDefinition = #router_grpc_registry_definition_external{
+    id = RegistryId, type = Type, package = Package, service = ServiceName,
+    fq_service = FqServiceName, methods = Methods, cmp = Cmp, host = Host, port = Port
   },
   ets:insert(S0#state.table_registry, RegistryDefinition),
   case Maintenance of
@@ -439,14 +485,14 @@ atom_snake_case(Name) ->
 %% ).
 match_spec_fun(undefined, {undefined, undefined}) ->
   fun(Key) ->
-    [{{'_','$1','_','_','_','_','_','_','_'}, [
+    [{{'_','$1','_','_','_','_','_','_','_','_'}, [
       {'>=','$1', {const,Key}}
     ], ['$_']}]
   end;
 
 match_spec_fun(FqFilter, {undefined, undefined}) ->
   fun(Key) ->
-    [{{'_','$1','_','_','_','$2','_','_','_'}, [
+    [{{'_','$1','_','_','_','$2','_','_','_','_'}, [
       {'>=','$1', {const,Key}},
       {'==','$2', {const,FqFilter}}
     ], ['$_']}]
@@ -454,7 +500,7 @@ match_spec_fun(FqFilter, {undefined, undefined}) ->
 
 match_spec_fun(undefined, {Host, Port}) ->
   fun(Key) ->
-    [{{'_','$1','_','_','_','_','_','$2','$3'}, [
+    [{{'_','$1','_','_','_','_','_','_','$2','$3'}, [
       {'>=','$1', {const,Key}},
       {'==','$2', {const,Host}},
       {'==','$3', {const,Port}}
@@ -463,7 +509,7 @@ match_spec_fun(undefined, {Host, Port}) ->
 
 match_spec_fun(FqFilter, {Host, Port}) ->
   fun(Key) ->
-    [{{'_','$1','_','_','_','$2','_','$3','$4'}, [
+    [{{'_','$1','_','_','_','$2','_','_','$3','$4'}, [
       {'>=','$1', {const,Key}},
       {'==','$2', {const,FqFilter}},
       {'==','$3', {const,Host}},

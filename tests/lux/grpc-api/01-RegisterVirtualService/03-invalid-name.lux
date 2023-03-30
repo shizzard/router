@@ -16,7 +16,6 @@ Check if router fails to register a gRPC virtual service with empty name.
 [shell request]
   [progress (register with empty name)]
   [invoke grpc-call-unary ${service-definition} ${request-file-empty} ${response-file-empty} ${service-name} ${method-register}]
-  [sleep 1]
 
 [shell response]
   [progress (check response)]

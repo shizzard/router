@@ -18,7 +18,6 @@ Check if router fails to unregister a gRPC virtual service with empty or restric
 [shell request]
   [progress (register with empty package)]
   [invoke grpc-call-unary ${service-definition} ${request-file-empty} ${response-file-empty} ${service-name} ${method-unregister}]
-  [sleep 1]
 
 [shell response]
   [progress (check response)]
@@ -33,7 +32,6 @@ Check if router fails to unregister a gRPC virtual service with empty or restric
 [shell request]
   [progress (register with restricted package)]
   [invoke grpc-call-unary ${service-definition} ${request-file-restricted} ${response-file-restricted} ${service-name} ${method-unregister}]
-  [sleep 1]
 
 [shell response]
   [progress (check response)]
