@@ -1,0 +1,30 @@
+[doc]
+Check if router fails to unregister a gRPC virtual service with empty host.
+[enddoc]
+
+[include ../../__common/common.luxinc]
+[include ../../__common/grpc.luxinc]
+[include ../../__common/jq.luxinc]
+[include ../../__router/registry-service.luxinc]
+
+[global request-file-empty=json/04-empty-host-request.json]
+[global response-file-empty=json/04-empty-host-response.json]
+
+[shell router]
+  [invoke app-start]
+
+[shell request]
+  [progress (register with empty host)]
+  [invoke grpc-call-unary ${service-definition} ${request-file-empty} ${response-file-empty} ${service-name} ${method-set-maintenance}]
+
+[shell response]
+  [progress (check response)]
+  [invoke jq-check-file-match ${response-file-empty} .header.\"content-type\" "application/grpc+proto"]
+  [invoke jq-check-file-match ${response-file-empty} .header.\"grpc-user-agent\" "router/"]
+  [invoke jq-check-file-match ${response-file-empty} .status.code InvalidArgument]
+  [invoke jq-check-file-match ${response-file-empty} .status.number 3]
+  [invoke jq-check-file-match ${response-file-empty} .status.message "Invalid payload"]
+  [invoke jq-check-file-match ${response-file-empty} .messages null]
+  [invoke jq-check-file-match ${response-file-empty} .trailer.host_empty "Virtual service instance host cannot be empty"]
+
+[cleanup]

@@ -3,4 +3,6 @@
 
 [global method-register=RegisterVirtualService]
 [global method-unregister=RegisterVirtualService]
+[global method-set-maintenance=EnableVirtualServiceMaintenance]
+[global method-unset-maintenance=DisableVirtualServiceMaintenance]
 [global method-list=ListVirtualServices]

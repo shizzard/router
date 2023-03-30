@@ -16,6 +16,8 @@
 [endmacro]
 
 [macro app-start]
+  !substring="$${LUX_EXTRA_LOGS##*/}"; export LUX_TEST_CASE="$${substring%%.*}"
+  !export ROUTER_APP_LOGGER_LOG_ROOT="$${ROUTER_APP_LOGGER_LOG_ROOT}/$${LUX_TEST_CASE}"
   !cd $$ROUTER_DIR_ROOT
   ?${sh-prompt}
   [progress (starting application)]
@@ -33,7 +35,7 @@
 [endmacro]
 
 [macro log-tail level]
-  !tail -F ${ROUTER_DIR_LOGS}/lgr_${level}.log.1
+  !tail -F ${ROUTER_APP_LOGGER_LOG_ROOT}/lgr_${level}.log.1
 [endmacro]
 
 [macro read-file file]

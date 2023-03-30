@@ -13,6 +13,7 @@ Check if router accepts gRPC virtual service registration.
 [global response-file-list=json/01-list-stateful-response.json]
 
 [shell router]
+  !printenv
   [invoke app-start]
 
 [shell request]

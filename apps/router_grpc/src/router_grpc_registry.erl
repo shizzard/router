@@ -238,24 +238,24 @@ get_list(Filters, PageToken, PageSize) ->
 
 
 
--spec is_maintenance(ServiceName :: service_name(), Host :: endpoint_host(), Port :: endpoint_port()) ->
+-spec is_maintenance(FqServiceName :: fq_service_name(), Host :: endpoint_host(), Port :: endpoint_port()) ->
   Ret :: boolean().
 
-is_maintenance(ServiceName, Host, Port) ->
-  persistent_term:get(?persistent_term_key_external_maintenance(ServiceName, Host, Port), false).
+is_maintenance(FqServiceName, Host, Port) ->
+  persistent_term:get(?persistent_term_key_external_maintenance(FqServiceName, Host, Port), false).
 
 
 
 -spec set_maintenance(
-  ServiceName :: service_name(), Host :: endpoint_host(), Port :: endpoint_port(), Bool :: boolean()
+  FqServiceName :: fq_service_name(), Host :: endpoint_host(), Port :: endpoint_port(), Bool :: boolean()
 ) ->
   Ret :: typr:ok_return().
 
-set_maintenance(ServiceName, Host, Port, true) ->
-  persistent_term:put(?persistent_term_key_external_maintenance(ServiceName, Host, Port), true);
+set_maintenance(FqServiceName, Host, Port, true) ->
+  persistent_term:put(?persistent_term_key_external_maintenance(FqServiceName, Host, Port), true);
 
-set_maintenance(ServiceName, Host, Port, false) ->
-  _ = persistent_term:erase(?persistent_term_key_external_maintenance(ServiceName, Host, Port)),
+set_maintenance(FqServiceName, Host, Port, false) ->
+  _ = persistent_term:erase(?persistent_term_key_external_maintenance(FqServiceName, Host, Port)),
   ok.
 
 

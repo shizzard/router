@@ -24,7 +24,7 @@ $(warning "No evans found, is it installed? See https://github.com/ktr0731/evans
 endif
 
 .PHONY: all
-all:
+all: clean-json
 	@$(TOOL_LUX) --doc 1 .
 	$(TOOL_LUX) --html enable .
 
@@ -32,13 +32,14 @@ all:
 build:
 
 .PHONY: clean
-TMP_RESPONSE_FILES := $(shell find . -type f -iname "*-response.json")
-TMP_REQUEST_FILES := $(shell \
-	find . -type f -iname "*-request.template.json" -exec \
-	bash -c 'f="$${1%.template*}.json"; [ -e "$$f" ] && echo "$$f"' _ {} \;\
-)
-clean:
+clean: clean-json
 	rm -rf lux_logs router_logs
+
+.PHONY: clean-json
+
+TMP_RESPONSE_FILES := $(shell find . -type f -iname "*-response.json")
+TMP_REQUEST_FILES := $(shell find . -iname "*.template.json" -type f -exec bash -c 'f="$${1%.template.json}.json"; [ -e "$$f" ] && echo "$$f"' _ {} \;)
+clean-json:
 ifneq (,$(TMP_REQUEST_FILES))
 	rm -rf $(TMP_REQUEST_FILES)
 endif
