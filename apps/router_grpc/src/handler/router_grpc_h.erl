@@ -1,7 +1,7 @@
 -module(router_grpc_h).
 
 -include("router_grpc.hrl").
--include("router_grpc_registry.hrl").
+-include("router_grpc_service_registry.hrl").
 -include_lib("router_log/include/router_log.hrl").
 
 -export([init/3, data/4, info/3, terminate/3, early_error/5, decode_data/2]).
@@ -9,10 +9,9 @@
 -record(state, {
   stream_id :: cowboy_stream:streamid() | undefined,
   req :: cowboy_req:req() | undefined,
-  registry_details :: router_grpc_registry:details() | undefined,
+  registry_details :: router_grpc_service_registry:details() | undefined,
   is_client_fin = false :: boolean(),
   is_server_fin = false :: boolean(),
-  handler_pid :: term() | undefined,
   data_buffer = <<>> :: binary()
 }).
 -type state() :: #state{}.
@@ -83,16 +82,15 @@ init(StreamId, #{
   headers := #{?grpc_header_content_type := <<"application/grpc", _Rest/binary>>}
 } = Req, _Opts) ->
   router_log:component(router_grpc),
-  case router_grpc_registry:lookup(Path) of
-    {ok, #router_grpc_registry_definition_internal{module = Module} = Details} ->
+  case router_grpc_service_registry:lookup(Path) of
+    {ok, #router_grpc_service_registry_definition_internal{} = Details} ->
       ?l_debug(#{text => "Internal gRPC request", what => init, details => #{
-        service => Details#router_grpc_registry_definition_internal.service,
-        method => Details#router_grpc_registry_definition_internal.method
+        service => Details#router_grpc_service_registry_definition_internal.service,
+        method => Details#router_grpc_service_registry_definition_internal.method
       }}),
-      {ok, Pid} = Module:start_link(),
       {
-        [{spawn, Pid, 5000}],
-        #state{stream_id = StreamId, req = Req, registry_details = Details, handler_pid = Pid}
+        [],
+        #state{stream_id = StreamId, req = Req, registry_details = Details}
       };
     {error, undefined} ->
       ?l_debug(#{text => "Malformed gRPC request", what => init, details => #{path => Path}}),
@@ -168,7 +166,7 @@ decode_data(?compressed_data(Len, _Data, _Rest), _Definition) ->
 
 decode_data(
   ?non_compressed_data(Len, Data, Rest),
-  #router_grpc_registry_definition_internal{definition = Definition, input = Input}
+  #router_grpc_service_registry_definition_internal{definition = Definition, input = Input}
 ) ->
   try Definition:decode_msg(Data, Input) of
     Pdu -> {ok, {Pdu, Rest}}
@@ -181,7 +179,7 @@ decode_data(_Packet, _Definition) ->
 
 
 
-encode_data(Pdu, #router_grpc_registry_definition_internal{definition = Definition, output = Output}) ->
+encode_data(Pdu, #router_grpc_service_registry_definition_internal{definition = Definition, output = Output}) ->
   try Definition:encode_msg(Pdu, Output) of
     Data ->
       Len = byte_size(Data),
@@ -255,12 +253,11 @@ data_commands(Data, ServerFin) ->
 
 
 handle_grpc_pdu(Pdu, #state{
-  registry_details = #router_grpc_registry_definition_internal{
+  registry_details = #router_grpc_service_registry_definition_internal{
     module = Module, function = Function
-  },
-  handler_pid = Pid
+  }
 } = S0) ->
-  case Module:Function(Pid, Pdu) of
+  case Module:Function(Pdu) of
     {ok, wait} ->
       handle_grpc_pdu_wait(S0);
     {ok, {reply, ResponsePDU}} ->

@@ -1,0 +1,10 @@
+{
+  "filter_endpoint": {
+    "host": "test-1.lg",
+    "port": 8137
+  },
+  "pagination_request": {
+    "page_token": "ChFgDYNoBGQACXN0YXRlbGVzc20AAAARU3RhdGVsZXNzU2VydmljZUJtAAAACXRlc3QtMS5sZ2IAAB/J",
+    "page_size": 2
+  }
+}

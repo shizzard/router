@@ -34,8 +34,8 @@ init([]) ->
   SupFlags = #{strategy => one_for_one, intensity => 10, period => 10},
   Children = [
     #{
-      id => router_grpc_registry,
-      start => {router_grpc_registry, start_link, [
+      id => router_grpc_service_registry,
+      start => {router_grpc_service_registry, start_link, [
         [registry_definitions],
         #{'lg.service.router.RegistryService' => router_grpc_h_registry}
       ]},

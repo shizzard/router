@@ -1,9 +1,9 @@
--module(router_grpc_registry).
+-module(router_grpc_service_registry).
 -behaviour(gen_server).
 
 -compile([nowarn_untyped_record]).
 
--include("router_grpc_registry.hrl").
+-include("router_grpc_service_registry.hrl").
 -include_lib("gpb/include/gpb.hrl").
 -include_lib("router_log/include/router_log.hrl").
 -include_lib("typr/include/typr_specs_gen_server.hrl").
@@ -14,8 +14,8 @@
 ]).
 -export([start_link/2, init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
 
--define(table_registry, router_grpc_registry_table_registry).
--define(table_lookup, router_grpc_registry_table_lookup).
+-define(table_registry, router_grpc_service_registry_table_registry).
+-define(table_lookup, router_grpc_service_registry_table_lookup).
 -define(table_registry_key(Type, ServiceName, Host, Port), {Type, ServiceName, Host, Port}).
 -define(table_lookup_key(Path), {Path}).
 -define(persistent_term_key_internal(Path), {?MODULE, persistent_term_key_internal, Path}).
@@ -50,8 +50,8 @@
 ]).
 
 -type definition() :: definition_internal() | definition_external().
--type definition_internal() :: #router_grpc_registry_definition_internal{}.
--type definition_external() :: #router_grpc_registry_definition_external{}.
+-type definition_internal() :: #router_grpc_service_registry_definition_internal{}.
+-type definition_external() :: #router_grpc_service_registry_definition_external{}.
 -export_type([definition/0, definition_internal/0, definition_external/0]).
 
 
@@ -276,11 +276,11 @@ init({ServiceDefinitions, ServiceMap}) ->
   S0 = #state{
     table_registry = ets:new(?table_registry,
       [ordered_set, protected, named_table, {read_concurrency, true},
-      {keypos, #router_grpc_registry_definition_external.id}]
+      {keypos, #router_grpc_service_registry_definition_external.id}]
     ),
     table_lookup = ets:new(?table_lookup,
       [duplicate_bag, protected, named_table, {read_concurrency, true},
-      {keypos, #router_grpc_registry_definition_external.id}]
+      {keypos, #router_grpc_service_registry_definition_external.id}]
     )
   },
   init_internals(ServiceDefinitions, ServiceMap, S0),
@@ -297,14 +297,14 @@ handle_call(?call_register_stateless(Type, Package, ServiceName, Methods, Mainte
   lists:foreach(fun(MethodName) ->
     Path = <<"/", FqServiceName/binary, "/", MethodName/binary>>,
     LookupId = ?table_lookup_key(Path),
-    Definition = #router_grpc_registry_definition_external{
+    Definition = #router_grpc_service_registry_definition_external{
       id = LookupId, type = Type, package = Package, service = ServiceName,
       fq_service = FqServiceName, methods = Methods, host = Host, port = Port
     },
     ets:insert(S0#state.table_lookup, Definition)
   end, Methods),
   RegistryId = ?table_registry_key(Type, ServiceName, Host, Port),
-  RegistryDefinition = #router_grpc_registry_definition_external{
+  RegistryDefinition = #router_grpc_service_registry_definition_external{
     id = RegistryId, type = Type, package = Package, service = ServiceName,
     fq_service = FqServiceName, methods = Methods, host = Host, port = Port
   },
@@ -320,14 +320,14 @@ handle_call(?call_register_stateful(Type, Package, ServiceName, Methods, Cmp, Ma
   lists:foreach(fun(MethodName) ->
     Path = <<"/", FqServiceName/binary, "/", MethodName/binary>>,
     LookupId = ?table_lookup_key(Path),
-    Definition = #router_grpc_registry_definition_external{
+    Definition = #router_grpc_service_registry_definition_external{
       id = LookupId, type = Type, package = Package, service = ServiceName,
       fq_service = FqServiceName, methods = Methods, cmp = Cmp, host = Host, port = Port
     },
     ets:insert(S0#state.table_lookup, Definition)
   end, Methods),
   RegistryId = ?table_registry_key(Type, ServiceName, Host, Port),
-  RegistryDefinition = #router_grpc_registry_definition_external{
+  RegistryDefinition = #router_grpc_service_registry_definition_external{
     id = RegistryId, type = Type, package = Package, service = ServiceName,
     fq_service = FqServiceName, methods = Methods, cmp = Cmp, host = Host, port = Port
   },
@@ -375,12 +375,12 @@ code_change(_OldVsn, S0, _Extra) ->
 
 %% This function causes dialyzer error regarding record construction:
 %% > Record construction
-%% > #router_grpc_registry_definition_external{id::{'_'},type::'_',package::'_',fq_service::'_',methods::'_'}
+%% > #router_grpc_service_registry_definition_external{id::{'_'},type::'_',package::'_',fq_service::'_',methods::'_'}
 %% > violates the declared type of ...
 -dialyzer({nowarn_function, [handle_call_unregister/5]}).
 handle_call_unregister(Type, ServiceName, Host, Port, S0) ->
   true = ets:delete(S0#state.table_registry, ?table_registry_key(Type, ServiceName, Host, Port)),
-  true = ets:match_delete(S0#state.table_lookup, #router_grpc_registry_definition_external{
+  true = ets:match_delete(S0#state.table_lookup, #router_grpc_service_registry_definition_external{
     id = ?table_lookup_key('_'), service = ServiceName, host = Host, port = Port, _ = '_'
   }),
   {reply, ok, S0}.
@@ -418,12 +418,12 @@ init_internals_service_methods(ServiceName, ServiceDefinition, Methods, ModuleNa
       FunctionName = atom_snake_case(MethodName),
       ModuleExports = ModuleName:module_info(exports),
       ExportedArities = proplists:get_all_values(FunctionName, ModuleExports),
-      case lists:member(2, ExportedArities) of
+      case lists:member(1, ExportedArities) of
         true ->
           ServiceNameBin = atom_to_binary(ServiceName),
           MethodNameBin = atom_to_binary(MethodName),
           PathBin = <<"/", ServiceNameBin/binary, "/", MethodNameBin/binary>>,
-          Definition = #router_grpc_registry_definition_internal{
+          Definition = #router_grpc_service_registry_definition_internal{
             definition = ServiceDefinition, service = ServiceNameBin, method = MethodNameBin,
             module = ModuleName, function = FunctionName, input = Input, output = Output,
             input_stream = InputStream, output_stream = OutputStream, opts = Opts
@@ -478,7 +478,7 @@ atom_snake_case(Name) ->
 
 %% e.g.
 %% ets:fun2ms(
-%%   fun(#router_grpc_registry_definition_external{id = Id, _ = '_'} = Obj)
+%%   fun(#router_grpc_service_registry_definition_external{id = Id, _ = '_'} = Obj)
 %%   when Id >= Key ->
 %%     Obj
 %%   end
@@ -519,4 +519,4 @@ match_spec_fun(FqFilter, {Host, Port}) ->
 
 
 
-key_take(#router_grpc_registry_definition_external{id = Id}) -> Id.
+key_take(#router_grpc_service_registry_definition_external{id = Id}) -> Id.
