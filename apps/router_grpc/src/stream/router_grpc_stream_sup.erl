@@ -1,4 +1,4 @@
--module('router_grpc_sup').
+-module(router_grpc_stream_sup).
 -behaviour(supervisor).
 
 -include_lib("router_log/include/router_log.hrl").
@@ -27,28 +27,15 @@ init([]) ->
   router_log:component(router_grpc),
 
   ok = init_prometheus_metrics(),
-  {ok, Port} = router_config:get(router_grpc, [listener, port]),
-  ok = start_cowboy(Port),
-  ?l_info(#{text => "gRPC listener started", what => init, result => ok, details => #{port => Port}}),
 
-  SupFlags = #{strategy => one_for_one, intensity => 10, period => 10},
+  SupFlags = #{strategy => simple_one_for_one, intensity => 10, period => 10},
   Children = [
     #{
-      id => router_grpc_service_registry,
-      start => {router_grpc_service_registry, start_link, [
-        [registry_definitions],
-        #{'lg.service.router.RegistryService' => router_grpc_h_registry}
-      ]},
-      restart => permanent,
+      id => ignored,
+      start => {router_grpc_stream_h, start_link, []},
+      restart => temporary,
       shutdown => 5000,
       type => worker
-    },
-    #{
-      id => router_grpc_stream_sup,
-      start => {router_grpc_stream_sup, start_link, []},
-      restart => permanent,
-      shutdown => infinity,
-      type => supervisor
     }
   ],
   {ok, {SupFlags, Children}}.
@@ -56,19 +43,6 @@ init([]) ->
 
 
 %% Internals
-
-
-
-start_cowboy(Port) ->
-  {ok, _} = cowboy:start_clear(router_grpc_listener,
-    [{port, Port}],
-    #{
-      env => #{dispatch => cowboy_router:compile([])},
-      stream_handlers => [router_grpc_h],
-      protocols => [http2]
-    }
-  ),
-  ok.
 
 
 

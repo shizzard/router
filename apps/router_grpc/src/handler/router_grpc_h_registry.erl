@@ -7,29 +7,21 @@
 -include_lib("router_log/include/router_log.hrl").
 
 -export([
-  register_virtual_service/1, unregister_virtual_service/1,
-  enable_virtual_service_maintenance/1, disable_virtual_service_maintenance/1,
-  list_virtual_services/1, control_stream/1
+  init/0,
+  register_virtual_service/2, unregister_virtual_service/2,
+  enable_virtual_service_maintenance/2, disable_virtual_service_maintenance/2,
+  list_virtual_services/2, control_stream/2
 ]).
-
--define(handler_mode_unary, handler_mode_unary).
--define(handler_mode_unistream_from, handler_mode_unistream_from).
--define(handler_mode_unistream_to, handler_mode_unistream_to).
--define(handler_mode_bistream, handler_mode_bistream).
 
 -define(default_page_size, 20).
 -define(max_page_size, 50).
 
+-record(state, {
+  session_id :: session_id()
+}).
+-type state() :: #state{}.
 
-
-%% Messages
-
--define(call_register_virtual_service(Pdu), {register_virtual_service, Pdu}).
--define(call_unregister_virtual_service(Pdu), {unregister_virtual_service, Pdu}).
--define(call_enable_virtual_service_maintenance(Pdu), {enable_virtual_service_maintenance, Pdu}).
--define(call_disable_virtual_service_maintenance(Pdu), {disable_virtual_service_maintenance, Pdu}).
--define(call_list_virtual_services(Pdu), {list_virtual_services, Pdu}).
--define(call_control_stream(Pdu), {control_stream, Pdu}).
+-type session_id() :: binary().
 
 
 
@@ -41,8 +33,16 @@
 
 
 
+-spec init() -> state().
+
+init() ->
+  #state{}.
+
+
+
 -spec register_virtual_service(
-  Pdu :: registry_definitions:'lg.service.router.RegisterVirtualServiceRq'()
+  Pdu :: registry_definitions:'lg.service.router.RegisterVirtualServiceRq'(),
+  S0 :: state()
 ) ->
   router_grpc_h:handler_ret(
     PduT :: undefined,
@@ -50,26 +50,27 @@
     GrpcCodeT :: ?grpc_code_invalid_argument | ?grpc_code_internal
   ).
 
-register_virtual_service(Pdu) ->
-  case call_register_virtual_service_validate(Pdu) of
+register_virtual_service(Pdu, S0) ->
+  case register_virtual_service_handle(Pdu) of
     {ok, RetPdu} ->
       ?l_info(#{
-        text => "Virtual service registered", what => call_register_virtual_service,
+        text => "Virtual service registered", what => register_virtual_service,
         result => ok
       }),
-      {ok, {reply_fin, RetPdu}};
+      {ok, {reply_fin, RetPdu}, S0};
     {error, Trailers} ->
       ?l_debug(#{
-        text => "Failed to register virtual service", what => call_register_virtual_service,
+        text => "Failed to register virtual service", what => register_virtual_service,
         result => error, details => #{trailers => Trailers}
       }),
-      {error, {grpc_error, ?grpc_code_invalid_argument, ?grpc_message_invalid_argument_payload, Trailers}}
+      {error, {grpc_error, ?grpc_code_invalid_argument, ?grpc_message_invalid_argument_payload, Trailers}, S0}
   end.
 
 
 
 -spec unregister_virtual_service(
-  Pdu :: registry_definitions:'lg.service.router.UnregisterVirtualServiceRq'()
+  Pdu :: registry_definitions:'lg.service.router.UnregisterVirtualServiceRq'(),
+  S0 :: state()
 ) ->
   router_grpc_h:handler_ret(
     PduT :: undefined,
@@ -77,26 +78,27 @@ register_virtual_service(Pdu) ->
     GrpcCodeT :: ?grpc_code_invalid_argument | ?grpc_code_internal
   ).
 
-unregister_virtual_service(Pdu) ->
-  case call_unregister_virtual_service_validate(Pdu) of
+unregister_virtual_service(Pdu, S0) ->
+  case unregister_virtual_service_handle(Pdu) of
     {ok, RetPdu} ->
       ?l_info(#{
-        text => "Virtual service unregistered", what => call_unregister_virtual_service,
+        text => "Virtual service unregistered", what => unregister_virtual_service,
         result => ok
       }),
-      {ok, {reply_fin, RetPdu}};
+      {ok, {reply_fin, RetPdu}, S0};
     {error, Trailers} ->
       ?l_debug(#{
-        text => "Failed to unregister virtual service", what => call_unregister_virtual_service,
+        text => "Failed to unregister virtual service", what => unregister_virtual_service,
         result => error, details => #{trailers => Trailers}
       }),
-      {error, {grpc_error, ?grpc_code_invalid_argument, ?grpc_message_invalid_argument_payload, Trailers}}
+      {error, {grpc_error, ?grpc_code_invalid_argument, ?grpc_message_invalid_argument_payload, Trailers}, S0}
   end.
 
 
 
 -spec enable_virtual_service_maintenance(
-  Pdu :: registry_definitions:'lg.service.router.EnableVirtualServiceMaintenanceRq'()
+  Pdu :: registry_definitions:'lg.service.router.EnableVirtualServiceMaintenanceRq'(),
+  S0 :: state()
 ) ->
   router_grpc_h:handler_ret(
     PduT :: undefined,
@@ -104,26 +106,27 @@ unregister_virtual_service(Pdu) ->
     GrpcCodeT :: ?grpc_code_invalid_argument | ?grpc_code_internal
   ).
 
-enable_virtual_service_maintenance(Pdu) ->
-  case call_enable_virtual_service_maintenance_validate(Pdu) of
+enable_virtual_service_maintenance(Pdu, S0) ->
+  case enable_virtual_service_maintenance_handle(Pdu) of
     {ok, RetPdu} ->
       ?l_info(#{
-        text => "Virtual service maintenance mode set", what => call_enable_virtual_service_maintenance,
+        text => "Virtual service maintenance mode set", what => enable_virtual_service_maintenance,
         result => ok
       }),
-      {ok, {reply_fin, RetPdu}};
+      {ok, {reply_fin, RetPdu}, S0};
     {error, Trailers} ->
       ?l_debug(#{
-        text => "Failed to set virtual service maintenance mode", what => call_enable_virtual_service_maintenance,
+        text => "Failed to set virtual service maintenance mode", what => enable_virtual_service_maintenance,
         result => error, details => #{trailers => Trailers}
       }),
-      {error, {grpc_error, ?grpc_code_invalid_argument, ?grpc_message_invalid_argument_payload, Trailers}}
+      {error, {grpc_error, ?grpc_code_invalid_argument, ?grpc_message_invalid_argument_payload, Trailers}, S0}
   end.
 
 
 
 -spec disable_virtual_service_maintenance(
-  Pdu :: registry_definitions:'lg.service.router.DisableVirtualServiceMaintenanceRq'()
+  Pdu :: registry_definitions:'lg.service.router.DisableVirtualServiceMaintenanceRq'(),
+  S0 :: state()
 ) ->
   router_grpc_h:handler_ret(
     PduT :: undefined,
@@ -131,26 +134,27 @@ enable_virtual_service_maintenance(Pdu) ->
     GrpcCodeT :: ?grpc_code_invalid_argument | ?grpc_code_internal
   ).
 
-disable_virtual_service_maintenance(Pdu) ->
-  case call_disable_virtual_service_maintenance_validate(Pdu) of
+disable_virtual_service_maintenance(Pdu, S0) ->
+  case disable_virtual_service_maintenance_handle(Pdu) of
     {ok, RetPdu} ->
       ?l_info(#{
-        text => "Virtual service maintenance mode unset", what => call_disable_virtual_service_maintenance,
+        text => "Virtual service maintenance mode unset", what => disable_virtual_service_maintenance,
         result => ok
       }),
-      {ok, {reply_fin, RetPdu}};
+      {ok, {reply_fin, RetPdu}, S0};
     {error, Trailers} ->
       ?l_debug(#{
-        text => "Failed to unset virtual service maintenance mode", what => call_unregister_virtual_service,
+        text => "Failed to unset virtual service maintenance mode", what => unregister_virtual_service,
         result => error, details => #{trailers => Trailers}
       }),
-      {error, {grpc_error, ?grpc_code_invalid_argument, ?grpc_message_invalid_argument_payload, Trailers}}
+      {error, {grpc_error, ?grpc_code_invalid_argument, ?grpc_message_invalid_argument_payload, Trailers}, S0}
   end.
 
 
 
 -spec list_virtual_services(
-  Pdu :: registry_definitions:'lg.service.router.ListVirtualServicesRq'()
+  Pdu :: registry_definitions:'lg.service.router.ListVirtualServicesRq'(),
+  S0 :: state()
 ) ->
   router_grpc_h:handler_ret(
     PduT :: undefined,
@@ -158,18 +162,19 @@ disable_virtual_service_maintenance(Pdu) ->
     GrpcCodeT :: ?grpc_code_invalid_argument | ?grpc_code_internal
   ).
 
-list_virtual_services(Pdu) ->
-  case call_list_virtual_services_validate(Pdu) of
+list_virtual_services(Pdu, S0) ->
+  case list_virtual_services_handle(Pdu) of
     {ok, RetPdu} ->
-      {ok, {reply_fin, RetPdu}};
+      {ok, {reply_fin, RetPdu}, S0};
     {error, Trailers} ->
-      {error, {grpc_error, ?grpc_code_invalid_argument, ?grpc_message_invalid_argument_payload, Trailers}}
+      {error, {grpc_error, ?grpc_code_invalid_argument, ?grpc_message_invalid_argument_payload, Trailers}, S0}
   end.
 
 
 
 -spec control_stream(
-  Pdu :: registry_definitions:'lg.service.router.ControlStreamEvent'()
+  Pdu :: registry_definitions:'lg.service.router.ControlStreamEvent'(),
+  S0 :: state()
 ) ->
   router_grpc_h:handler_ret(
     PduT :: registry_definitions:'lg.service.router.ControlStreamEvent'(),
@@ -177,8 +182,19 @@ list_virtual_services(Pdu) ->
     GrpcCodeT :: ?grpc_code_internal
   ).
 
-control_stream(_Pdu) ->
-  {error, {grpc_error, ?grpc_code_unimplemented, ?grpc_message_unimplemented}}.
+control_stream(_Pdu, S0) ->
+  {error, {grpc_error, ?grpc_code_unimplemented, ?grpc_message_unimplemented}, S0}.
+  % case control_stream_validate(Pdu) of
+  %   ok ->
+  %     SessionId = list_to_binary(uuid:uuid_to_string(uuid:get_v4_urandom())),
+  %     {ok, {reply, #'lg.service.router.ControlStreamEvent'{
+  %       event = {init_rs, #'lg.service.router.ControlStreamEvent.InitRs'{
+  %         id = Id, session_id = SessionId
+  %       }}
+  %     }}, S0};
+  %   {error, Trailers} ->
+  %     {error, {grpc_error, ?grpc_code_invalid_argument, ?grpc_message_invalid_argument_payload, Trailers}, S0}
+  % end.
 
 
 
@@ -186,7 +202,7 @@ control_stream(_Pdu) ->
 
 
 
-call_register_virtual_service_validate(
+register_virtual_service_handle(
   #'lg.service.router.RegisterVirtualServiceRq'{
     virtual_service = #'lg.core.grpc.VirtualService'{
       service = {stateless, #'lg.core.grpc.VirtualService.StatelessVirtualService'{
@@ -216,7 +232,7 @@ call_register_virtual_service_validate(
       {error, maps:from_list(ErrorList)}
   end;
 
-call_register_virtual_service_validate(
+register_virtual_service_handle(
   #'lg.service.router.RegisterVirtualServiceRq'{
     virtual_service = #'lg.core.grpc.VirtualService'{
       service = {stateful, #'lg.core.grpc.VirtualService.StatefulVirtualService'{
@@ -250,7 +266,7 @@ call_register_virtual_service_validate(
 
 
 
-call_unregister_virtual_service_validate(#'lg.service.router.UnregisterVirtualServiceRq'{
+unregister_virtual_service_handle(#'lg.service.router.UnregisterVirtualServiceRq'{
   virtual_service = #'lg.core.grpc.VirtualService'{
     service = Service,
     endpoint = #'lg.core.network.Endpoint'{host = Host0, port = Port0}
@@ -284,7 +300,7 @@ call_unregister_virtual_service_validate(#'lg.service.router.UnregisterVirtualSe
 
 
 
-call_enable_virtual_service_maintenance_validate(#'lg.service.router.EnableVirtualServiceMaintenanceRq'{
+enable_virtual_service_maintenance_handle(#'lg.service.router.EnableVirtualServiceMaintenanceRq'{
   virtual_service = #'lg.core.grpc.VirtualService'{
     service = Service,
     endpoint = #'lg.core.network.Endpoint'{host = Host0, port = Port0}
@@ -318,7 +334,7 @@ call_enable_virtual_service_maintenance_validate(#'lg.service.router.EnableVirtu
 
 
 
-call_disable_virtual_service_maintenance_validate(#'lg.service.router.DisableVirtualServiceMaintenanceRq'{
+disable_virtual_service_maintenance_handle(#'lg.service.router.DisableVirtualServiceMaintenanceRq'{
   virtual_service = #'lg.core.grpc.VirtualService'{
     service = Service,
     endpoint = #'lg.core.network.Endpoint'{host = Host0, port = Port0}
@@ -352,7 +368,7 @@ call_disable_virtual_service_maintenance_validate(#'lg.service.router.DisableVir
 
 
 
-call_list_virtual_services_validate(#'lg.service.router.ListVirtualServicesRq'{
+list_virtual_services_handle(#'lg.service.router.ListVirtualServicesRq'{
   filter_fq_service_name = FilterFqServiceName0,
   filter_endpoint = FilterEndpoint0,
   pagination_request = PaginationRequest0
@@ -365,21 +381,21 @@ call_list_virtual_services_validate(#'lg.service.router.ListVirtualServicesRq'{
   ]), Error /= undefined],
   case ErrorList of
     [] ->
-      call_list_virtual_services_list(FilterFqServiceName, FilterHost, FilterPort, PageToken, PageSize);
+      list_virtual_services_list(FilterFqServiceName, FilterHost, FilterPort, PageToken, PageSize);
     _ ->
       {error, maps:from_list(ErrorList)}
   end.
 
 
 
-call_list_virtual_services_list(FilterFqServiceName, FilterHost, FilterPort, PageToken, PageSize) ->
+list_virtual_services_list(FilterFqServiceName, FilterHost, FilterPort, PageToken, PageSize) ->
   Filters = maps:from_list(lists:flatten([
     case FilterFqServiceName of undefined -> []; _ -> {filter_fq_service_name, FilterFqServiceName} end,
     case {FilterHost, FilterPort} of {undefined, undefined} -> []; _ -> {filter_endpoint, {FilterHost, FilterPort}} end
   ])),
   case router_grpc_service_registry:get_list(Filters, PageToken, PageSize) of
     {ok, {Definitions, NextPageToken}} ->
-      Services = lists:map(fun call_list_virtual_services_map/1, Definitions),
+      Services = lists:map(fun list_virtual_services_list_map/1, Definitions),
       PaginationRs = case NextPageToken of
         undefined -> undefined;
         _ -> #'lg.core.trait.PaginationRs'{next_page_token = NextPageToken}
@@ -393,7 +409,7 @@ call_list_virtual_services_list(FilterFqServiceName, FilterHost, FilterPort, Pag
 
 
 
-call_list_virtual_services_map(#router_grpc_service_registry_definition_external{
+list_virtual_services_list_map(#router_grpc_service_registry_definition_external{
   type = stateless, package = Package, service = ServiceName,
   fq_service = FqServiceName, methods = Methods, host = Host, port = Port
 }) ->
@@ -407,7 +423,7 @@ call_list_virtual_services_map(#router_grpc_service_registry_definition_external
       endpoint = #'lg.core.network.Endpoint'{host = Host, port = Port}
     };
 
-call_list_virtual_services_map(#router_grpc_service_registry_definition_external{
+list_virtual_services_list_map(#router_grpc_service_registry_definition_external{
   type = stateful, package = Package, service = ServiceName,
   fq_service = FqServiceName, methods = Methods, cmp = Cmp, host = Host, port = Port
 }) ->

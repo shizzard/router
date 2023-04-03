@@ -25,13 +25,9 @@
 
 %% Messages
 
-% -define(call_set_proxy(Provider, Id, Proxy), {call_set_proxy, Provider, Id, Proxy}).
-% -define(call_remove_proxy(Provider, Id), {call_remove_proxy, Provider, Id}).
 
 
 %% Metrics
-
-% -define(metric_gge_proxies_amount, router_proxy_registry_proxies_amount).
 
 
 

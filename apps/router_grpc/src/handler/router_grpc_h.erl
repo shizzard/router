@@ -9,9 +9,11 @@
 -record(state, {
   stream_id :: cowboy_stream:streamid() | undefined,
   req :: cowboy_req:req() | undefined,
+  handler_state :: term(),
   registry_details :: router_grpc_service_registry:details() | undefined,
   is_client_fin = false :: boolean(),
   is_server_fin = false :: boolean(),
+  is_server_header_sent = false :: boolean(),
   data_buffer = <<>> :: binary()
 }).
 -type state() :: #state{}.
@@ -83,21 +85,18 @@ init(StreamId, #{
 } = Req, _Opts) ->
   router_log:component(router_grpc),
   case router_grpc_service_registry:lookup(Path) of
-    {ok, #router_grpc_service_registry_definition_internal{} = Details} ->
+    {ok, #router_grpc_service_registry_definition_internal{module = Module} = Details} ->
       ?l_debug(#{text => "Internal gRPC request", what => init, details => #{
         service => Details#router_grpc_service_registry_definition_internal.service,
         method => Details#router_grpc_service_registry_definition_internal.method
       }}),
       {
         [],
-        #state{stream_id = StreamId, req = Req, registry_details = Details}
+        #state{stream_id = StreamId, req = Req, handler_state = Module:init(), registry_details = Details}
       };
     {error, undefined} ->
       ?l_debug(#{text => "Malformed gRPC request", what => init, details => #{path => Path}}),
-      {
-        response_commands(?grpc_code_unimplemented, ?grpc_message_unimplemented),
-        #state{}
-      }
+      send_response(?grpc_code_unimplemented, ?grpc_message_unimplemented, #state{})
   end;
 
 init(_StreamId, _Req, _Opts) ->
@@ -118,12 +117,12 @@ data(StreamId, Fin, Data, #state{registry_details = Details, data_buffer = Buffe
       ?l_debug(#{text => "gRPC payload decode error", what => data, result => error, details => #{
         data => Data, code => GrpcCode, message => GrpcMessage
       }}),
-      {response_commands(GrpcCode, GrpcMessage), S1};
+      send_response(GrpcCode, GrpcMessage, S1);
     {error, Reason} ->
       ?l_debug(#{text => "gRPC payload decode error", what => data, result => error, details => #{
         data => Data, reason => Reason
       }}),
-      {response_commands(?grpc_code_invalid_argument, ?grpc_message_invalid_argument_payload), S1};
+      send_response(?grpc_code_invalid_argument, ?grpc_message_invalid_argument_payload, S1);
     {more, Data} ->
       {[], S1#state{data_buffer = <<Buffer/binary, Data/binary>>}}
   end.
@@ -190,86 +189,101 @@ encode_data(Pdu, #router_grpc_service_registry_definition_internal{definition = 
 
 
 
-response_commands(GrpcCode, GrpcMessage) ->
+send_response(GrpcCode, GrpcMessage, S0) ->
+  {
+    maybe_response_headers(S0) ++ [
+      {trailers, #{
+        ?grpc_header_code => integer_to_binary(GrpcCode),
+        ?grpc_header_message => GrpcMessage
+      }}
+    ],
+    S0#state{is_server_header_sent = true}
+  }.
+
+
+
+send_response(GrpcCode, GrpcMessage, Trailers, S0) when is_map(Trailers) ->
+  {
+    maybe_response_headers(S0) ++ [
+      {trailers, maps:merge(Trailers, #{
+        ?grpc_header_code => integer_to_binary(GrpcCode),
+        ?grpc_header_message => GrpcMessage
+      })}
+    ],
+    S0#state{is_server_header_sent = true}
+  };
+
+send_response(GrpcCode, GrpcMessage, Data, S0) when is_binary(Data) ->
+  {
+    maybe_response_headers(S0) ++ [
+      {data, nofin, Data},
+      {trailers, #{
+        ?grpc_header_code => integer_to_binary(GrpcCode),
+        ?grpc_header_message => GrpcMessage
+      }}
+    ],
+    S0#state{is_server_header_sent = true}
+  }.
+
+
+
+send_response(GrpcCode, GrpcMessage, Trailers, Data, #state{is_server_header_sent = false} = S0)
+when is_map(Trailers), is_binary(Data) ->
+  {
+    maybe_response_headers(S0) ++ [
+      {data, nofin, Data},
+      {trailers, maps:merge(Trailers, #{
+        ?grpc_header_code => integer_to_binary(GrpcCode),
+        ?grpc_header_message => GrpcMessage
+      })}
+    ],
+    S0#state{is_server_header_sent = true}
+  }.
+
+
+
+send_data(Data, #state{is_server_fin = ServerFin} = S0) ->
+  {
+    maybe_response_headers(S0) ++ [
+      {data, ?bool_to_fin(ServerFin), Data}
+    ],
+    S0#state{is_server_header_sent = true}
+  }.
+
+
+
+maybe_response_headers(#state{is_server_header_sent = false}) ->
   [
     {headers, <<"200">>, #{
       ?grpc_header_content_type => <<"application/grpc+proto">>,
       ?grpc_header_user_agent => <<"grpc-erlang-lg-router/0.1.0">>
-    }},
-    {trailers, #{
-      ?grpc_header_code => integer_to_binary(GrpcCode),
-      ?grpc_header_message => GrpcMessage
     }}
-  ].
-
-
-
-response_commands(GrpcCode, GrpcMessage, Trailers) when is_map(Trailers) ->
-  [
-    {headers, <<"200">>, #{
-      ?grpc_header_content_type => <<"application/grpc+proto">>,
-      ?grpc_header_user_agent => <<"grpc-erlang-lg-router/0.1.0">>
-    }},
-    {trailers, maps:merge(Trailers, #{
-      ?grpc_header_code => integer_to_binary(GrpcCode),
-      ?grpc_header_message => GrpcMessage
-    })}
   ];
 
-response_commands(GrpcCode, GrpcMessage, Data) when is_binary(Data) ->
-  [
-    {headers, <<"200">>, #{
-      ?grpc_header_content_type => <<"application/grpc+proto">>,
-      ?grpc_header_user_agent => <<"grpc-erlang-lg-router/0.1.0">>
-    }},
-    {data, nofin, Data},
-    {trailers, #{
-      ?grpc_header_code => integer_to_binary(GrpcCode),
-      ?grpc_header_message => GrpcMessage
-    }}
-  ].
-
-
-
-response_commands(GrpcCode, GrpcMessage, Trailers, Data) when is_map(Trailers), is_binary(Data) ->
-  [
-    {headers, <<"200">>, #{
-      ?grpc_header_content_type => <<"application/grpc+proto">>,
-      ?grpc_header_user_agent => <<"grpc-erlang-lg-router/0.1.0">>
-    }},
-    {data, nofin, Data},
-    {trailers, maps:merge(Trailers, #{
-      ?grpc_header_code => integer_to_binary(GrpcCode),
-      ?grpc_header_message => GrpcMessage
-    })}
-  ].
-
-
-
-data_commands(Data, ServerFin) ->
-  [data, ?bool_to_fin(ServerFin), Data].
+maybe_response_headers(_) -> [].
 
 
 
 
 handle_grpc_pdu(Pdu, #state{
+  handler_state = HS0,
   registry_details = #router_grpc_service_registry_definition_internal{
     module = Module, function = Function
   }
 } = S0) ->
-  case Module:Function(Pdu) of
-    {ok, wait} ->
-      handle_grpc_pdu_wait(S0);
-    {ok, {reply, ResponsePDU}} ->
-      handle_grpc_pdu_send_response(ResponsePDU, S0);
-    {ok, {reply_fin, ResponsePDU}} ->
-      handle_grpc_pdu_send_response(ResponsePDU, S0#state{is_server_fin = true});
-    {error, {grpc_error, GrpcCode, GrpcMessage}} ->
-      handle_grpc_pdu_send_error(GrpcCode, GrpcMessage, S0);
-    {error, {grpc_error, GrpcCode, GrpcMessage, TrailersOrData}} ->
-      handle_grpc_pdu_send_error(GrpcCode, GrpcMessage, TrailersOrData, S0);
-    {error, {grpc_error, GrpcCode, GrpcMessage, Trailers, Data}} ->
-      handle_grpc_pdu_send_error(GrpcCode, GrpcMessage, Trailers, Data, S0)
+  case Module:Function(Pdu, HS0) of
+    {ok, wait, HS1} ->
+      handle_grpc_pdu_wait(S0#state{handler_state = HS1});
+    {ok, {reply, ResponsePDU}, HS1} ->
+      handle_grpc_pdu_send_response(ResponsePDU, S0#state{handler_state = HS1});
+    {ok, {reply_fin, ResponsePDU}, HS1} ->
+      handle_grpc_pdu_send_response(ResponsePDU, S0#state{handler_state = HS1, is_server_fin = true});
+    {error, {grpc_error, GrpcCode, GrpcMessage}, HS1} ->
+      handle_grpc_pdu_send_error(GrpcCode, GrpcMessage, S0#state{handler_state = HS1});
+    {error, {grpc_error, GrpcCode, GrpcMessage, TrailersOrData}, HS1} ->
+      handle_grpc_pdu_send_error(GrpcCode, GrpcMessage, TrailersOrData, S0#state{handler_state = HS1});
+    {error, {grpc_error, GrpcCode, GrpcMessage, Trailers, Data}, HS1} ->
+      handle_grpc_pdu_send_error(GrpcCode, GrpcMessage, Trailers, Data, S0#state{handler_state = HS1})
   end.
 
 
@@ -280,12 +294,12 @@ handle_grpc_pdu_wait(S0) ->
 
 
 handle_grpc_pdu_send_response(Pdu, #state{registry_details = Details} = S0) ->
-  case {S0#state.is_client_fin, S0#state.is_server_fin, encode_data(Pdu, Details)} of
-    {true, _, {ok, Data}} ->
-      {response_commands(?grpc_code_ok, ?grpc_message_ok, Data), S0};
-    {false, ServerFin, {ok, Data}} ->
-      {data_commands(Data, ServerFin), S0};
-    {_, _, {error, Reason}} ->
+  case {S0#state.is_client_fin, encode_data(Pdu, Details)} of
+    {true, {ok, Data}} ->
+      send_response(?grpc_code_ok, ?grpc_message_ok, Data, S0);
+    {false, {ok, Data}} ->
+      send_data(Data, S0);
+    {_, {error, Reason}} ->
       ?l_error(#{
         text => "gRPC payload encode error", what => handle_grpc_pdu_send_response,
         result => error, details => #{reason => Reason}}
@@ -296,14 +310,14 @@ handle_grpc_pdu_send_response(Pdu, #state{registry_details = Details} = S0) ->
 
 
 handle_grpc_pdu_send_error(GrpcCode, GrpcMessage, S0) ->
-  {response_commands(GrpcCode, GrpcMessage), S0}.
+  send_response(GrpcCode, GrpcMessage, S0).
 
 
 
 handle_grpc_pdu_send_error(GrpcCode, GrpcMessage, TrailersOrData, S0) ->
-  {response_commands(GrpcCode, GrpcMessage, TrailersOrData), S0}.
+  send_response(GrpcCode, GrpcMessage, TrailersOrData, S0).
 
 
 
 handle_grpc_pdu_send_error(GrpcCode, GrpcMessage, Trailers, Data, S0) ->
-  {response_commands(GrpcCode, GrpcMessage, Trailers, Data), S0}.
+  send_response(GrpcCode, GrpcMessage, Trailers, Data, S0).

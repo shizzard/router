@@ -418,7 +418,7 @@ init_internals_service_methods(ServiceName, ServiceDefinition, Methods, ModuleNa
       FunctionName = atom_snake_case(MethodName),
       ModuleExports = ModuleName:module_info(exports),
       ExportedArities = proplists:get_all_values(FunctionName, ModuleExports),
-      case lists:member(1, ExportedArities) of
+      case lists:member(2, ExportedArities) of
         true ->
           ServiceNameBin = atom_to_binary(ServiceName),
           MethodNameBin = atom_to_binary(MethodName),
