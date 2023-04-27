@@ -9,6 +9,9 @@
 -define(trailer_pagination_request_not_implemented, <<"pagination_request_not_implemented">>).
 -define(trailer_pagination_request_page_size_invalid, <<"pagination_request_page_size_invalid">>).
 -define(trailer_pagination_request_page_token_invalid, <<"pagination_request_page_token_invalid">>).
+-define(trailer_id_empty, <<"id_empty">>).
+-define(trailer_control_stream_reinit, <<"re_init">>).
+-define(trailer_control_stream_noinit, <<"no_init">>).
 
 -define(trailer_package_empty_message(_Package), <<"Virtual service package cannot be empty">>).
 -define(trailer_package_restricted_message(Package), <<"Virtual service package is restricted: ", Package/binary>>).
@@ -21,3 +24,6 @@
 -define(trailer_pagination_request_not_implemented_message(_), <<"ListVirtualServices pagination_request not implemented">>).
 -define(trailer_pagination_request_page_size_invalid_message(PageSize), <<"Pagination request page size is invalid: ", (integer_to_binary(PageSize))/binary>>).
 -define(trailer_pagination_request_page_token_invalid_message(PageToken), <<"Pagination request page token is invalid: ", PageToken/binary>>).
+-define(trailer_id_empty_message(_), <<"Request id cannot be empty">>).
+-define(trailer_control_stream_reinit_message(_), <<"InitRq was already handled within the control stream">>).
+-define(trailer_control_stream_noinit_message(_), <<"InitRq must be handled within the control stream first">>).

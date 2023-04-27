@@ -11,11 +11,13 @@ SHELL := bash
 
 ERLC := $(shell which erlc)
 DOCKER := $(shell which docker)
+PYTHON3 := $(shell which python3)
+PIP3 := $(shell which pip3)
 
 ROUTER_DIR_ROOT := $(abspath ./)
 ROUTER_DIR_APPS := $(ROUTER_DIR_ROOT)/apps
 ROUTER_DIR_CONFIG := $(ROUTER_DIR_ROOT)/config
-ROUTER_DIR_TESTS := $(ROUTER_DIR_ROOT)/tests
+ROUTER_DIR_TESTS := $(ROUTER_DIR_ROOT)/test
 ROUTER_DIR_BUILD := $(ROUTER_DIR_ROOT)/_build
 ROUTER_DIR_TOOLS := $(ROUTER_DIR_ROOT)/_tools
 ROUTER_DIR_LOGS := $(ROUTER_DIR_ROOT)/_logs
@@ -51,7 +53,8 @@ RELEASE_TEST_BIN_CLI := $(ROUTER_DIR_BUILD)/test/bin/router
 RELEASE_PROD_BIN := $(ROUTER_DIR_BUILD)/prod/rel/router/bin/router
 RELEASE_PROD_BIN_CLI := $(ROUTER_DIR_BUILD)/prod/bin/router
 
-SOURCE := $(shell find apps -iname "*.erl" -or -iname "*.hrl" -or -iname "*.app.src" -or -iname "*.proto")
+SOURCE := $(shell find apps -iname "*.erl" -or -iname "*.hrl" -or -iname "*.app.src")
+PROTO := $(shell find apps -iname "*.proto")
 CONFIG := $(ROUTER_DIR_ROOT)/rebar.config $(ROUTER_DIR_CONFIG)/sys.config $(ROUTER_DIR_CONFIG)/vm.args
 
 .PHONY: all
@@ -78,16 +81,16 @@ version:
 
 REBAR := $(abspath ./)/rebar3
 
-$(RELEASE_BIN): $(SOURCE) $(CONFIG)
+$(RELEASE_BIN): $(SOURCE) $(PROTO) $(CONFIG)
 	$(REBAR) release
 
-$(RELEASE_BIN_CLI): $(SOURCE) $(CONFIG)
+$(RELEASE_BIN_CLI): $(SOURCE) $(PROTO) $(CONFIG)
 	$(REBAR) escriptize
 
-$(RELEASE_TEST_BIN): $(SOURCE) $(CONFIG)
+$(RELEASE_TEST_BIN): $(SOURCE) $(PROTO) $(CONFIG)
 	$(REBAR) as test release
 
-$(RELEASE_TEST_BIN_CLI): $(SOURCE) $(CONFIG)
+$(RELEASE_TEST_BIN_CLI): $(SOURCE) $(PROTO) $(CONFIG)
 	$(REBAR) as test escriptize
 
 $(RELEASE_PROD_BIN):
@@ -121,7 +124,7 @@ run: $(RELEASE_BIN)
 # Erlang test
 
 .PHONY: check
-check: dialyze unit-tests integration-tests lux-tests
+check: dialyze unit-tests common-tests lux-tests
 
 .PHONY: dialyze
 dialyze:
@@ -130,16 +133,17 @@ dialyze:
 	@echo "===== DIALYZER END ====="
 
 .PHONY: unit-tests
-unit-tests: $(RELEASE_TEST_BIN) $(RELEASE_TEST_BIN_CLI)
+unit-tests:
 	@echo "=====   EUNIT RUN  ====="
 	$(REBAR) as test eunit
 	@echo "=====   EUNIT END  ====="
 
-.PHONY: integration-tests
-integration-tests: $(RELEASE_TEST_BIN) $(RELEASE_TEST_BIN_CLI)
+.PHONY: common-tests
+ROUTER_DIR_TESTS_CT := $(ROUTER_DIR_TESTS)/ct
+common-tests:
 	@echo "=====    CT RUN    ====="
 	$(call print_app_env)
-	$(REBAR) as test ct
+	$(REBAR) as test ct -v -c --verbosity 100 --logdir $(ROUTER_DIR_TESTS_CT)/_logs
 	@echo "=====    CT END    ====="
 
 .PHONY: lux-tests

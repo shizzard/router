@@ -2,7 +2,9 @@
 -define(grpc_header_code, <<"grpc-status">>).
 -define(grpc_header_message, <<"grpc-message">>).
 
--define(grpc_header_content_type, <<"content-type">>).
+-define(http2_header_content_type, <<"content-type">>).
+-define(http2_header_te, <<"te">>).
+
 -define(grpc_header_timeout, <<"grpc-timeout">>).
 -define(grpc_header_encoding, <<"grpc-encoding">>).
 -define(grpc_header_accept_encoding, <<"grpc-accept-encoding">>).

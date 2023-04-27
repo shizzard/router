@@ -4,11 +4,23 @@
 -include_lib("router_log/include/router_log.hrl").
 -include_lib("typr/include/typr_specs_supervisor.hrl").
 
--export([start_link/0, init/1]).
+-export([start_handler/3, start_link/0, init/1]).
 
 
 
 %% Interface
+
+
+
+-spec start_handler(
+  SessionId :: router_grpc_stream_h:session_id(),
+  Host :: router_grpc_service_registry:endpoint_host(),
+  Port :: router_grpc_service_registry:endpoint_port()
+) ->
+  type:ok_return(OkRet :: pid()).
+
+start_handler(SessionId, Host, Port) ->
+  supervisor:start_child(?MODULE, [SessionId, Host, Port, self()]).
 
 
 

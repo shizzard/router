@@ -38,7 +38,7 @@
  {<<"ssl_verify_fun">>,{pkg,<<"ssl_verify_fun">>,<<"1.1.6">>},1},
  {<<"typr">>,
   {git,"https://github.com/shizzard/typr.git",
-       {ref,"2c93c55cdc64fb1a45efbd7ab3e23250d8370342"}},
+       {ref,"3d1fe722687cee2b427e7fb9f5bf8d24d514140b"}},
   0},
  {<<"unicode_util_compat">>,{pkg,<<"unicode_util_compat">>,<<"0.7.0">>},1},
  {<<"uuid">>,{pkg,<<"uuid_erl">>,<<"2.0.5">>},0}]}.

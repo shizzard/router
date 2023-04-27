@@ -44,8 +44,8 @@ dispatch([]) ->
 actions() ->
   [
     {"actions", router_cli_handler_actions, "List available actions"},
-    {"help", router_cli_handler_help, "Print help"},
-    {"proxy", router_cli_handler_proxy, "Proxy management"}
+    {"grpcc", router_cli_handler_grpcc, "Run gRPC client"},
+    {"help", router_cli_handler_help, "Print help"}
   ].
 
 
@@ -105,7 +105,7 @@ dispatch_action_validate(Module, MergedConfig, ParsedArgs, Rest) ->
         "Missing mandatory arguments: ~ts~n"
         "Try '~ts help <action>' command",
         [
-          lists:flatten(lists:join(",", [atom_to_list(A) || {A, _, _, _, _} <- MissingArgs])),
+          lists:flatten(lists:join(", ", [atom_to_list(A) || {A, _, _, _, _} <- MissingArgs])),
           escript:script_name()
         ]
       )

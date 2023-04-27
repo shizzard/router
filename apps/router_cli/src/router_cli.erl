@@ -1,24 +1,32 @@
 -module('router_cli').
 -include("router_cli.hrl").
 
--export([main/1, exit/1, exit/2, exit/3, router_nodename/0]).
+-export([main/1, node_connect/0, exit/1, exit/2, exit/3, router_nodename/0]).
 
 
 
 -spec main(Args :: [term()]) -> ok.
 
 main(Args) ->
+  try
+    router_cli_getopt:dispatch(Args),
+    ?MODULE:exit(?EXIT_CODE_OK)
+  catch T:E:S ->
+    ?MODULE:exit(?EXIT_CODE_UNKNOWN, "Unexpected error: ~p:~p~n~p", [T, E, S])
+  end.
+
+
+
+-spec node_connect() ->
+  typr:ok_return() | no_return().
+
+node_connect() ->
   Nodename = local_nodename(),
   net_kernel:start([Nodename, shortnames]),
   erlang:set_cookie(Nodename, router), %% magic here
   case net_adm:ping(router_nodename()) of
     pong ->
-      try
-        router_cli_getopt:dispatch(Args),
-        ?MODULE:exit(?EXIT_CODE_OK)
-      catch T:E:S ->
-        ?MODULE:exit(?EXIT_CODE_UNKNOWN, "Unexpected error: ~p:~p~n~p", [T, E, S])
-      end;
+      ok;
     pang ->
       ?MODULE:exit(?EXIT_CODE_NODE_INACCESSIBLE, "Node ~p is not accessible (dead?)", [router_nodename()])
   end.

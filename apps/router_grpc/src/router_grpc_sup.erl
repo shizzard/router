@@ -5,6 +5,8 @@
 -include_lib("typr/include/typr_specs_supervisor.hrl").
 
 -export([start_link/0, init/1]).
+%% used within integration tests
+-export([start_cowboy/1, stop_cowboy/0]).
 
 
 
@@ -59,6 +61,9 @@ init([]) ->
 
 
 
+-spec start_cowboy(Port :: pos_integer()) ->
+  typr:ok_return().
+
 start_cowboy(Port) ->
   {ok, _} = cowboy:start_clear(router_grpc_listener,
     [{port, Port}],
@@ -69,6 +74,14 @@ start_cowboy(Port) ->
     }
   ),
   ok.
+
+
+
+-spec stop_cowboy() ->
+  type:generic_return(ErrorRet :: not_found).
+
+stop_cowboy() ->
+  cowboy:stop_listener(router_grpc_listener).
 
 
 

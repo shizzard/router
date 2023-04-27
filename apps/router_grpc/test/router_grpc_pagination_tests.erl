@@ -1,5 +1,5 @@
 -module(router_grpc_pagination_tests).
--compile([export_all, nowarn_export_all, nowarn_unused_function]).
+-compile([export_all, nowarn_export_all, nowarn_unused_function, nowarn_missing_spec]).
 
 -include_lib("eunit/include/eunit.hrl").
 -include_lib("typr/include/typr_specs_eunit.hrl").
@@ -14,8 +14,6 @@
   ets :: ets:tid(),
   records = [] :: [#test_record{}]
 }).
-
--spec ?eunit_test(test).
 
 
 

@@ -17,11 +17,10 @@
 -define(max_page_size, 50).
 
 -record(state, {
-  session_id :: session_id()
+  session_id :: router_grpc_stream_h:session_id() | undefined,
+  handler_pid :: pid() | undefined
 }).
 -type state() :: #state{}.
-
--type session_id() :: binary().
 
 
 
@@ -44,11 +43,8 @@ init() ->
   Pdu :: registry_definitions:'lg.service.router.RegisterVirtualServiceRq'(),
   S0 :: state()
 ) ->
-  router_grpc_h:handler_ret(
-    PduT :: undefined,
-    PduFinT :: registry_definitions:'lg.service.router.RegisterVirtualServiceRs'(),
-    GrpcCodeT :: ?grpc_code_invalid_argument | ?grpc_code_internal
-  ).
+  {ok, router_grpc_h:handler_ret_ok_reply_fin(PduT :: registry_definitions:'lg.service.router.RegisterVirtualServiceRs'()), S1 :: state()} |
+  {error, router_grpc_h:handler_ret_error_grpc_error_trailers(GrpcCodeT :: ?grpc_code_invalid_argument | ?grpc_code_internal), S1 :: state()}.
 
 register_virtual_service(Pdu, S0) ->
   case register_virtual_service_handle(Pdu) of
@@ -72,11 +68,8 @@ register_virtual_service(Pdu, S0) ->
   Pdu :: registry_definitions:'lg.service.router.UnregisterVirtualServiceRq'(),
   S0 :: state()
 ) ->
-  router_grpc_h:handler_ret(
-    PduT :: undefined,
-    PduFinT :: registry_definitions:'lg.service.router.UnregisterVirtualServiceRs'(),
-    GrpcCodeT :: ?grpc_code_invalid_argument | ?grpc_code_internal
-  ).
+  {ok, router_grpc_h:handler_ret_ok_reply_fin(PduT :: registry_definitions:'lg.service.router.UnregisterVirtualServiceRs'()), S1 :: state()} |
+  {error, router_grpc_h:handler_ret_error_grpc_error_trailers(GrpcCodeT :: ?grpc_code_invalid_argument | ?grpc_code_internal), S1 :: state()}.
 
 unregister_virtual_service(Pdu, S0) ->
   case unregister_virtual_service_handle(Pdu) of
@@ -100,11 +93,8 @@ unregister_virtual_service(Pdu, S0) ->
   Pdu :: registry_definitions:'lg.service.router.EnableVirtualServiceMaintenanceRq'(),
   S0 :: state()
 ) ->
-  router_grpc_h:handler_ret(
-    PduT :: undefined,
-    PduFinT :: registry_definitions:'lg.service.router.EnableVirtualServiceMaintenanceRs'(),
-    GrpcCodeT :: ?grpc_code_invalid_argument | ?grpc_code_internal
-  ).
+  {ok, router_grpc_h:handler_ret_ok_reply_fin(PduT :: registry_definitions:'lg.service.router.EnableVirtualServiceMaintenanceRs'()), S1 :: state()} |
+  {error, router_grpc_h:handler_ret_error_grpc_error_trailers(GrpcCodeT :: ?grpc_code_invalid_argument | ?grpc_code_internal), S1 :: state()}.
 
 enable_virtual_service_maintenance(Pdu, S0) ->
   case enable_virtual_service_maintenance_handle(Pdu) of
@@ -128,11 +118,8 @@ enable_virtual_service_maintenance(Pdu, S0) ->
   Pdu :: registry_definitions:'lg.service.router.DisableVirtualServiceMaintenanceRq'(),
   S0 :: state()
 ) ->
-  router_grpc_h:handler_ret(
-    PduT :: undefined,
-    PduFinT :: registry_definitions:'lg.service.router.DisableVirtualServiceMaintenanceRs'(),
-    GrpcCodeT :: ?grpc_code_invalid_argument | ?grpc_code_internal
-  ).
+  {ok, router_grpc_h:handler_ret_ok_reply_fin(PduT :: registry_definitions:'lg.service.router.DisableVirtualServiceMaintenanceRs'()), S1 :: state()} |
+  {error, router_grpc_h:handler_ret_error_grpc_error_trailers(GrpcCodeT :: ?grpc_code_invalid_argument | ?grpc_code_internal), S1 :: state()}.
 
 disable_virtual_service_maintenance(Pdu, S0) ->
   case disable_virtual_service_maintenance_handle(Pdu) of
@@ -156,11 +143,8 @@ disable_virtual_service_maintenance(Pdu, S0) ->
   Pdu :: registry_definitions:'lg.service.router.ListVirtualServicesRq'(),
   S0 :: state()
 ) ->
-  router_grpc_h:handler_ret(
-    PduT :: undefined,
-    PduFinT :: registry_definitions:'lg.service.router.ListVirtualServicesRs'(),
-    GrpcCodeT :: ?grpc_code_invalid_argument | ?grpc_code_internal
-  ).
+  {ok, router_grpc_h:handler_ret_ok_reply_fin(PduT :: registry_definitions:'lg.service.router.ListVirtualServicesRs'()), S1 :: state()} |
+  {error, router_grpc_h:handler_ret_error_grpc_error_trailers(GrpcCodeT :: ?grpc_code_invalid_argument | ?grpc_code_internal), S1 :: state()}.
 
 list_virtual_services(Pdu, S0) ->
   case list_virtual_services_handle(Pdu) of
@@ -176,25 +160,44 @@ list_virtual_services(Pdu, S0) ->
   Pdu :: registry_definitions:'lg.service.router.ControlStreamEvent'(),
   S0 :: state()
 ) ->
-  router_grpc_h:handler_ret(
-    PduT :: registry_definitions:'lg.service.router.ControlStreamEvent'(),
-    PduFinT :: undefined,
-    GrpcCodeT :: ?grpc_code_internal
-  ).
+  {ok, router_grpc_h:handler_ret_ok_reply(PduT :: registry_definitions:'lg.service.router.ControlStreamEvent'()), S1 :: state()} |
+  {error, router_grpc_h:handler_ret_error_grpc_error_trailers(GrpcCodeT :: ?grpc_code_invalid_argument | ?grpc_code_internal), S1 :: state()}.
 
-control_stream(_Pdu, S0) ->
-  {error, {grpc_error, ?grpc_code_unimplemented, ?grpc_message_unimplemented}, S0}.
-  % case control_stream_validate(Pdu) of
-  %   ok ->
-  %     SessionId = list_to_binary(uuid:uuid_to_string(uuid:get_v4_urandom())),
-  %     {ok, {reply, #'lg.service.router.ControlStreamEvent'{
-  %       event = {init_rs, #'lg.service.router.ControlStreamEvent.InitRs'{
-  %         id = Id, session_id = SessionId
-  %       }}
-  %     }}, S0};
-  %   {error, Trailers} ->
-  %     {error, {grpc_error, ?grpc_code_invalid_argument, ?grpc_message_invalid_argument_payload, Trailers}, S0}
-  % end.
+%% Initial InitRq request: session id is undefined, handler pid is undefined
+control_stream(#'lg.service.router.ControlStreamEvent'{
+  event = {init_rq, #'lg.service.router.ControlStreamEvent.InitRq'{}}
+} = Pdu, #state{session_id = undefined, handler_pid = undefined} = S0) ->
+  case control_stream_handle(Pdu, S0) of
+    {ok, {RetPdu, S1}} ->
+      {ok, {reply, RetPdu}, S1};
+    {error, {Trailers, S1}} ->
+      {error, {grpc_error, ?grpc_code_invalid_argument, ?grpc_message_invalid_argument_payload, Trailers}, S1}
+  end;
+
+%% No initial InitRq request: session id is undefined, handler pid is undefined
+control_stream(_Pdu, #state{session_id = undefined, handler_pid = undefined} = S0) ->
+  {error, {grpc_error, ?grpc_code_invalid_argument, ?grpc_message_invalid_argument_payload, #{
+    ?trailer_control_stream_noinit => ?trailer_control_stream_noinit_message(undefined)
+  }}, S0};
+
+%% Erroneous InitRq request: session is already established
+control_stream(#'lg.service.router.ControlStreamEvent'{
+  event = {init_rq, #'lg.service.router.ControlStreamEvent.InitRq'{}}
+} = _Pdu, S0) ->
+  {error, {grpc_error, ?grpc_code_invalid_argument, ?grpc_message_invalid_argument_payload, #{
+    ?trailer_control_stream_reinit => ?trailer_control_stream_reinit_message(undefined)
+  }}, S0};
+
+%% RegisterVirtualService event, stateful variant
+control_stream(#'lg.service.router.ControlStreamEvent'{
+  event = {register_virtual_service_rq, #'lg.service.router.ControlStreamEvent.RegisterVirtualServiceRq'{}}
+} = Pdu, S0) ->
+  case control_stream_handle(Pdu, S0) of
+    {ok, {RetPdu, S1}} ->
+      {ok, {reply, RetPdu}, S1#state{}};
+    {error, {Trailers, S1}} ->
+      {error, {grpc_error, ?grpc_code_invalid_argument, ?grpc_message_invalid_argument_payload, Trailers}, S1}
+  end.
 
 
 
@@ -221,9 +224,9 @@ register_virtual_service_handle(
   {MaintenanceModeErrors, MaintenanceMode} = validate_maintenance_mode(MaintenanceMode0),
   {HostErrors, Host} = validate_host(Host0),
   {PortErrors, Port} = validate_port(Port0),
-  ErrorList = [Error || Error <- lists:flatten([
+  ErrorList = lists:flatten([
     PackageErrors, NameErrors, MethodsErrors, MaintenanceModeErrors, HostErrors, PortErrors
-  ]), Error /= undefined],
+  ]),
   case ErrorList of
     [] ->
       ok = router_grpc_service_registry:register(stateless, Package, Name, Methods, MaintenanceMode, Host, Port),
@@ -253,9 +256,9 @@ register_virtual_service_handle(
   {MaintenanceModeErrors, MaintenanceMode} = validate_maintenance_mode(MaintenanceMode0),
   {HostErrors, Host} = validate_host(Host0),
   {PortErrors, Port} = validate_port(Port0),
-  ErrorList = [Error || Error <- lists:flatten([
+  ErrorList = lists:flatten([
     PackageErrors, NameErrors, MethodsErrors, CmpErrors, MaintenanceModeErrors, HostErrors, PortErrors
-  ]), Error /= undefined],
+  ]),
   case ErrorList of
     [] ->
       ok = router_grpc_service_registry:register(stateful, Package, Name, Methods, Cmp, MaintenanceMode, Host, Port),
@@ -286,9 +289,9 @@ unregister_virtual_service_handle(#'lg.service.router.UnregisterVirtualServiceRq
   {NameErrors, Name} = validate_name(Name0),
   {HostErrors, Host} = validate_host(Host0),
   {PortErrors, Port} = validate_port(Port0),
-  ErrorList = [Error || Error <- lists:flatten([
+  ErrorList = lists:flatten([
     PackageErrors, NameErrors, HostErrors, PortErrors
-  ]), Error /= undefined],
+  ]),
   case ErrorList of
     [] ->
       ServiceName = <<Package/binary, ".", Name/binary>>,
@@ -320,9 +323,9 @@ enable_virtual_service_maintenance_handle(#'lg.service.router.EnableVirtualServi
   {NameErrors, Name} = validate_name(Name0),
   {HostErrors, Host} = validate_host(Host0),
   {PortErrors, Port} = validate_port(Port0),
-  ErrorList = [Error || Error <- lists:flatten([
+  ErrorList = lists:flatten([
     PackageErrors, NameErrors, HostErrors, PortErrors
-  ]), Error /= undefined],
+  ]),
   case ErrorList of
     [] ->
       ServiceName = <<Package/binary, ".", Name/binary>>,
@@ -354,9 +357,9 @@ disable_virtual_service_maintenance_handle(#'lg.service.router.DisableVirtualSer
   {NameErrors, Name} = validate_name(Name0),
   {HostErrors, Host} = validate_host(Host0),
   {PortErrors, Port} = validate_port(Port0),
-  ErrorList = [Error || Error <- lists:flatten([
+  ErrorList = lists:flatten([
     PackageErrors, NameErrors, HostErrors, PortErrors
-  ]), Error /= undefined],
+  ]),
   case ErrorList of
     [] ->
       ServiceName = <<Package/binary, ".", Name/binary>>,
@@ -376,9 +379,9 @@ list_virtual_services_handle(#'lg.service.router.ListVirtualServicesRq'{
   {FilterFqServiceNameErrors, FilterFqServiceName} = validate_filter_fq_service_name(FilterFqServiceName0),
   {FilterEndpointErrors, {FilterHost, FilterPort}} = validate_filter_endpoint(FilterEndpoint0),
   {PaginationRequestErrors, {PageToken, PageSize}} = validate_pagination_request(PaginationRequest0),
-  ErrorList = [Error || Error <- lists:flatten([
+  ErrorList = lists:flatten([
     FilterFqServiceNameErrors, FilterEndpointErrors, PaginationRequestErrors
-  ]), Error /= undefined],
+  ]),
   case ErrorList of
     [] ->
       list_virtual_services_list(FilterFqServiceName, FilterHost, FilterPort, PageToken, PageSize);
@@ -440,6 +443,102 @@ list_virtual_services_list_map(#router_grpc_service_registry_definition_external
 
 
 
+control_stream_handle(#'lg.service.router.ControlStreamEvent'{
+  event = {init_rq, #'lg.service.router.ControlStreamEvent.InitRq'{
+    id = IdRecord0, session_id = <<>>,
+    endpoint = #'lg.core.network.Endpoint'{host = Host0, port = Port0}
+  }}
+}, S0) ->
+  {IdRecordErrors, IdRecord} = validate_id(IdRecord0),
+  % {SessionErrors, <<>>} = validate_session_id(SessionId0),
+  {HostErrors, Host} = validate_host(Host0),
+  {PortErrors, Port} = validate_port(Port0),
+  ErrorList = lists:flatten([IdRecordErrors, HostErrors, PortErrors]),
+  case ErrorList of
+    [] ->
+      SessionId = list_to_binary(uuid:uuid_to_string(uuid:get_v4_urandom())),
+      {ok, HPid} = router_grpc_stream_sup:start_handler(SessionId, Host, Port),
+      {ok, {#'lg.service.router.ControlStreamEvent'{
+        event = {init_rs, #'lg.service.router.ControlStreamEvent.InitRs'{
+          id = IdRecord, session_id = SessionId, result = #'lg.core.trait.Result'{status = 'SUCCESS'}
+        }}
+      }, S0#state{session_id = SessionId, handler_pid = HPid}}};
+    Trailers -> {error, {Trailers, S0}}
+  end;
+
+control_stream_handle(#'lg.service.router.ControlStreamEvent'{
+  event = {register_virtual_service_rq, #'lg.service.router.ControlStreamEvent.RegisterVirtualServiceRq'{
+    id = IdRecord0,
+    virtual_service = #'lg.core.grpc.VirtualService'{
+      service = {stateless, #'lg.core.grpc.VirtualService.StatelessVirtualService'{
+        package = Package0,
+        name = Name0,
+        methods = Methods0
+      }},
+      maintenance_mode_enabled = MaintenanceMode0,
+      endpoint = #'lg.core.network.Endpoint'{host = Host0, port = Port0}
+    }
+  }}
+}, S0) ->
+  {IdRecordErrors, IdRecord} = validate_id(IdRecord0),
+  {PackageErrors, Package} = validate_package(Package0),
+  {NameErrors, Name} = validate_name(Name0),
+  {MethodsErrors, Methods} = validate_methods(Methods0),
+  {MaintenanceModeErrors, MaintenanceMode} = validate_maintenance_mode(MaintenanceMode0),
+  {HostErrors, Host} = validate_host(Host0),
+  {PortErrors, Port} = validate_port(Port0),
+  ErrorList = lists:flatten([
+    IdRecordErrors, PackageErrors, NameErrors, MethodsErrors, MaintenanceModeErrors, HostErrors, PortErrors
+  ]),
+  case ErrorList of
+    [] ->
+      ok = router_grpc_service_registry:register(stateless, Package, Name, Methods, MaintenanceMode, Host, Port),
+      {ok, {#'lg.service.router.ControlStreamEvent'{
+        event = {register_virtual_service_rs, #'lg.service.router.ControlStreamEvent.RegisterVirtualServiceRs'{
+          id = IdRecord, result = #'lg.core.trait.Result'{status = 'SUCCESS'}
+        }}
+      }, S0}};
+    Trailers -> {error, {Trailers, S0}}
+  end;
+
+control_stream_handle(#'lg.service.router.ControlStreamEvent'{
+  event = {register_virtual_service_rq, #'lg.service.router.ControlStreamEvent.RegisterVirtualServiceRq'{
+    id = IdRecord0,
+    virtual_service = #'lg.core.grpc.VirtualService'{
+      service = {stateful, #'lg.core.grpc.VirtualService.StatefulVirtualService'{
+        package = Package0,
+        name = Name0,
+        methods = Methods0,
+        cmp = Cmp0
+      }},
+      maintenance_mode_enabled = MaintenanceMode0,
+      endpoint = #'lg.core.network.Endpoint'{host = Host0, port = Port0}
+    }
+  }}
+}, S0) ->
+  {IdRecordErrors, IdRecord} = validate_id(IdRecord0),
+  {PackageErrors, Package} = validate_package(Package0),
+  {NameErrors, Name} = validate_name(Name0),
+  {MethodsErrors, Methods} = validate_methods(Methods0),
+  {CmpErrors, Cmp} = validate_cmp(Cmp0),
+  {MaintenanceModeErrors, MaintenanceMode} = validate_maintenance_mode(MaintenanceMode0),
+  {HostErrors, Host} = validate_host(Host0),
+  {PortErrors, Port} = validate_port(Port0),
+  ErrorList = lists:flatten([
+    IdRecordErrors, PackageErrors, NameErrors, MethodsErrors, CmpErrors, MaintenanceModeErrors, HostErrors, PortErrors
+  ]),
+  case ErrorList of
+    [] ->
+      ok = router_grpc_service_registry:register(stateful, Package, Name, Methods, Cmp, MaintenanceMode, Host, Port),
+      {ok, {#'lg.service.router.ControlStreamEvent'{
+        event = {register_virtual_service_rs, #'lg.service.router.ControlStreamEvent.RegisterVirtualServiceRs'{
+          id = IdRecord, result = #'lg.core.trait.Result'{status = 'SUCCESS'}
+        }}
+      }, S0}};
+    Trailers -> {error, Trailers}
+  end.
+
+
 
 %% Validators
 
@@ -453,7 +552,7 @@ validate_package(Package) ->
     true ->
       {{?trailer_package_restricted, ?trailer_package_restricted_message(Package)}, undefined};
     false ->
-      {undefined, Package}
+      {[], Package}
   end.
 
 
@@ -462,7 +561,7 @@ validate_name(<<>>) ->
   {{?trailer_name_empty, ?trailer_name_empty_message(<<>>)}, undefined};
 
 validate_name(Name) ->
-  {undefined, Name}.
+  {[], Name}.
 
 
 
@@ -472,16 +571,16 @@ validate_methods(Methods) ->
     true ->
       {{?trailer_method_empty, ?trailer_method_empty_message(<<>>)}, undefined};
     false ->
-      {undefined, Names}
+      {[], Names}
   end.
 
 
 
-validate_cmp(Cmp) -> {undefined, Cmp}.
+validate_cmp(Cmp) -> {[], Cmp}.
 
 
 
-validate_maintenance_mode(Boolean) -> {undefined, Boolean}.
+validate_maintenance_mode(Boolean) -> {[], Boolean}.
 
 
 
@@ -489,7 +588,7 @@ validate_host(<<>>) ->
   {{?trailer_host_empty, ?trailer_host_empty_message(<<>>)}, undefined};
 
 validate_host(Host) ->
-  {undefined, Host}.
+  {[], Host}.
 
 
 
@@ -497,24 +596,24 @@ validate_port(Port) when Port > 65535; Port =< 0 ->
   {{?trailer_port_invalid, ?trailer_port_invalid_message(Port)}, undefined};
 
 validate_port(Port) ->
-  {undefined, Port}.
+  {[], Port}.
 
 
 
-validate_filter_fq_service_name(<<>>) -> {undefined, undefined};
+validate_filter_fq_service_name(<<>>) -> {[], undefined};
 
-validate_filter_fq_service_name(Filter) -> {undefined, Filter}.
+validate_filter_fq_service_name(Filter) -> {[], Filter}.
 
 
 
 validate_filter_endpoint(undefined) ->
-  {undefined, {undefined, undefined}};
+  {[], {undefined, undefined}};
 
 validate_filter_endpoint(#'lg.core.network.Endpoint'{host = FilterHost0, port = FilterPort0}) ->
   case {FilterHost0, FilterPort0} of
     %% Filter disabled
     {<<>>, 0} ->
-      {undefined, {undefined, undefined}};
+      {[], {undefined, undefined}};
     %% Host empty, port invalid
     {<<>>, FilterPort} when FilterPort > 65535 orelse FilterPort =< 0 ->
       {
@@ -522,29 +621,29 @@ validate_filter_endpoint(#'lg.core.network.Endpoint'{host = FilterHost0, port = 
           {?trailer_filter_endpoint_host_empty, ?trailer_filter_endpoint_host_empty_message(<<>>)},
           {?trailer_filter_endpoint_port_invalid, ?trailer_filter_endpoint_port_invalid_message(FilterPort)}
         ],
-        {undefined, undefined}
+        {[], undefined}
       };
     %% Host empty, port valid
     {<<>>, _FilterPort} ->
       {
         {?trailer_filter_endpoint_host_empty, ?trailer_filter_endpoint_host_empty_message(<<>>)},
-        {undefined, undefined}
+        {[], undefined}
       };
     %% Host valid, port invalid
     {FilterHost, FilterPort} when FilterHost /= <<>>, (FilterPort > 65535 orelse FilterPort =< 0) ->
       {
         {?trailer_filter_endpoint_port_invalid, ?trailer_filter_endpoint_port_invalid_message(FilterPort)},
-        {undefined, undefined}
+        {[], undefined}
       };
     %% Filter enabled
     {FilterHost, FilterPort} ->
-      {undefined, {FilterHost, FilterPort}}
+      {[], {FilterHost, FilterPort}}
   end.
 
 
 
 validate_pagination_request(undefined) ->
-  {undefined, {undefined, ?default_page_size}};
+  {[], {undefined, ?default_page_size}};
 
 validate_pagination_request(#'lg.core.trait.PaginationRq'{
   page_token = <<>>, page_size = PageSize
@@ -554,16 +653,30 @@ validate_pagination_request(#'lg.core.trait.PaginationRq'{
       {?trailer_pagination_request_page_size_invalid, ?trailer_pagination_request_page_size_invalid_message(PageSize)},
       {undefined, ?default_page_size}
     };
-    N when N > 0 orelse N =< ?max_page_size -> {undefined, {undefined, N}};
-    N when N > ?max_page_size -> {undefined, {undefined, ?max_page_size}}
+    N when N > 0 orelse N =< ?max_page_size -> {[], {undefined, N}};
+    N when N > ?max_page_size -> {[], {undefined, ?max_page_size}}
   end;
 
 validate_pagination_request(#'lg.core.trait.PaginationRq'{
   page_token = PageToken, page_size = 0
 }) ->
-  {undefined, {PageToken, ?default_page_size}};
+  {[], {PageToken, ?default_page_size}};
 
 validate_pagination_request(#'lg.core.trait.PaginationRq'{
   page_token = PageToken, page_size = PageSize
 }) ->
-  {undefined, {PageToken, PageSize}}.
+  {[], {PageToken, PageSize}}.
+
+
+
+validate_id(undefined) ->
+  {
+    {?trailer_id_empty, ?trailer_id_empty_message(undefined)},
+    undefined
+  };
+
+validate_id(#'lg.core.trait.Id'{id = Id} = IdRecord) when byte_size(Id) > 0 -> {[], IdRecord}.
+
+
+
+% validate_session_id(SessionId) -> {undefined, SessionId}.

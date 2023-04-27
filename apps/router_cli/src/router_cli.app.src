@@ -2,6 +2,6 @@
     {description, "CLI interface for router"},
     {vsn, "0.1.0"},
     {registered, []},
-    {applications, [kernel, stdlib, getopt]},
+    {applications, [kernel, stdlib, getopt, jsone]},
     {env,[]}
 ]}.
