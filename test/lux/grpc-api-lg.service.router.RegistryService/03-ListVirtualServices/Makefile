@@ -13,14 +13,9 @@ export TEST_ROOT := $(abspath ./)
 -include ./*.mk
 
 JQ := $(shell which jq)
-EVANS := $(shell which evans)
 
 ifeq (, $(JQ))
 $(warning "No jq found, is it installed?")
-endif
-
-ifeq (, $(EVANS))
-$(warning "No evans found, is it installed? See https://github.com/ktr0731/evans")
 endif
 
 .PHONY: all

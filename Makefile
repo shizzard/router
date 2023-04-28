@@ -18,6 +18,7 @@ ROUTER_DIR_ROOT := $(abspath ./)
 ROUTER_DIR_APPS := $(ROUTER_DIR_ROOT)/apps
 ROUTER_DIR_CONFIG := $(ROUTER_DIR_ROOT)/config
 ROUTER_DIR_TESTS := $(ROUTER_DIR_ROOT)/test
+ROUTER_DIR_PLT := $(ROUTER_DIR_ROOT)/.plt
 ROUTER_DIR_BUILD := $(ROUTER_DIR_ROOT)/_build
 ROUTER_DIR_TOOLS := $(ROUTER_DIR_ROOT)/_tools
 ROUTER_DIR_LOGS := $(ROUTER_DIR_ROOT)/_logs
@@ -128,28 +129,28 @@ check: dialyze unit-tests common-tests lux-tests
 
 .PHONY: dialyze
 dialyze:
-	@echo "===== DIALYZER RUN ====="
+	@echo ":: DIALYZER RUN"
 	$(REBAR) as test dialyzer
-	@echo "===== DIALYZER END ====="
+	@echo ":: DIALYZER END"
 
 .PHONY: unit-tests
 unit-tests:
-	@echo "=====   EUNIT RUN  ====="
+	@echo ":: EUNIT RUN"
 	$(REBAR) as test eunit
-	@echo "=====   EUNIT END  ====="
+	@echo "::   EUNIT END"
 
 .PHONY: common-tests
 ROUTER_DIR_TESTS_CT := $(ROUTER_DIR_TESTS)/ct
 common-tests:
-	@echo "=====    CT RUN    ====="
+	@echo ":: CT RUN"
 	$(call print_app_env)
 	$(REBAR) as test ct -v -c --verbosity 100 --logdir $(ROUTER_DIR_TESTS_CT)/_logs
-	@echo "=====    CT END    ====="
+	@echo ":: CT END"
 
 .PHONY: lux-tests
 ROUTER_DIR_TESTS_LUX := $(ROUTER_DIR_TESTS)/lux
 lux-tests: $(RELEASE_TEST_BIN) $(RELEASE_TEST_BIN_CLI) $(TOOL_LUX)
-	@echo "=====    LUX RUN   ====="
+	@echo ":: LUX RUN"
 ifeq (,$(TEST))
 	@$(foreach dir,\
 		$(shell $(TOOL_LUX) --mode=list_dir $(ROUTER_DIR_TESTS_LUX)),\
@@ -160,16 +161,16 @@ else
 		$(MAKE) -C $(shell dirname $(TEST)) build $(shell basename $(TEST) | cut -f 1 -d '.').test; \
 		echo;
 endif
-	@echo "=====    LUX END   ====="
+	@echo ":: LUX END"
 
 .PHONY: lux-clean
 ROUTER_DIR_TESTS_LUX := $(ROUTER_DIR_TESTS)/lux
 lux-clean: $(RELEASE_TEST_BIN) $(RELEASE_TEST_BIN_CLI) $(TOOL_LUX)
-	@echo "=====   LUX CLEAN  ====="
+	@echo ":: LUX CLEAN"
 	@$(foreach dir,\
 		$(shell $(TOOL_LUX) --mode=list_dir $(ROUTER_DIR_TESTS_LUX)),\
 		echo; echo " -> TESTCASE $(dir)"; $(MAKE) -C $(dir) clean; echo;)
-	@echo "=====    LUX END   ====="
+	@echo ":: LUX END"
 
 ################################################################################
 # Erlang clean

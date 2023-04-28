@@ -1,0 +1,65 @@
+name: Perform all checks
+run-name: Perform all checks (${{ github.ref_name }} / ${{ github.sha }})
+on: [push]
+
+permissions:
+  contents: read
+
+jobs:
+
+  build:
+    strategy:
+      matrix:
+        version: [25]
+    runs-on: ubuntu-latest
+
+    container:
+      image: erlang:${{ matrix.version }}
+
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    ## cached files
+    - name: Cache test build
+      id: test-build
+      uses: actions/cache@v3
+      with:
+        path: _build/test
+        key: ${{ runner.os }}-test-build-${{ hashFiles('rebar.lock') }}
+    - name: Cache test tools
+      id: test-tools
+      uses: actions/cache@v3
+      with:
+        path: _tools
+        key: ${{ runner.os }}-test-tools-${{ hashFiles('Makefile') }}
+    - name: Cache test plt
+      uses: actions/cache@v3
+      id: test-plt
+      with:
+        path: .plt
+        key: ${{ runner.os }}-test-plt-${{ hashFiles('rebar.lock') }}
+
+    ## dialyzer run
+    - name: Dialyzer
+      run: make dialyze
+
+    ## unit tests
+    - name: EUnit
+      run: make unit-tests
+
+    ## common tests
+    - name: Common Test
+      run: make common-tests
+
+    ## lux tests
+    - name: Install jq
+      uses: dcarbone/install-jq-action@v1.0.1
+    - name: Lux
+      run: make lux-tests
+    - name: Upload Lux Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: lux-tests-artifacts-${{ github.sha }}
+        path: test/lux
+        retention-days: 3
