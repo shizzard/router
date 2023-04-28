@@ -13,14 +13,9 @@ export TEST_ROOT := $(abspath ./)
 -include ./*.mk
 
 JQ := $(shell which jq)
-EVANS := $(shell which evans)
 
 ifeq (, $(JQ))
 $(warning "No jq found, is it installed?")
-endif
-
-ifeq (, $(EVANS))
-$(warning "No evans found, is it installed? See https://github.com/ktr0731/evans")
 endif
 
 .PHONY: all
@@ -36,8 +31,7 @@ clean: clean-json
 	rm -rf lux_logs router_logs
 
 .PHONY: clean-json
-
-TMP_RESPONSE_FILES := $(shell find . -type f -iname "*-response.json")
+TMP_RESPONSE_FILES := $(shell find . -type f -iname "*.response.json")
 TMP_REQUEST_FILES := $(shell find . -iname "*.template.json" -type f -exec bash -c 'f="$${1%.template.json}.json"; [ -e "$$f" ] && echo "$$f"' _ {} \;)
 clean-json:
 ifneq (,$(TMP_REQUEST_FILES))

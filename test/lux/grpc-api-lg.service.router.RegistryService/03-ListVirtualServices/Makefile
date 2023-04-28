@@ -36,8 +36,7 @@ clean: clean-json
 	rm -rf lux_logs router_logs
 
 .PHONY: clean-json
-
-TMP_RESPONSE_FILES := $(shell find . -type f -iname "*-response.json")
+TMP_RESPONSE_FILES := $(shell find . -type f -iname "*.response.json")
 TMP_REQUEST_FILES := $(shell find . -iname "*.template.json" -type f -exec bash -c 'f="$${1%.template.json}.json"; [ -e "$$f" ] && echo "$$f"' _ {} \;)
 clean-json:
 ifneq (,$(TMP_REQUEST_FILES))

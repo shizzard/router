@@ -3,17 +3,17 @@
 -include_lib("router_cli/include/router_cli.hrl").
 -include_lib("router_pb/include/registry_definitions.hrl").
 
--export([decode/2, encode_headers/5, encode_data/5, encode_trailers/4]).
+-export([decode/2, encode_headers/6, encode_data/6, encode_trailers/5]).
 
 -define(format_error(Fmt, Args), iolist_to_binary(io_lib:format(Fmt, Args))).
 -define(
-  out_filename(Dir, Prefix, N, Suffix),
-  lists:flatten([Dir, "/", Prefix, "-", integer_to_list(N), "-", Suffix, ".json"])
+  out_filename(Dir, Prefix, N, Type, Suffix),
+  lists:flatten([Dir, "/", Prefix, ".", integer_to_list(N), ".", Type, ".", Suffix, ".json"])
 ).
 
--define(prefix_headers, "headers").
--define(prefix_data, "data").
--define(prefix_trailers, "trailers").
+-define(type_headers, "headers").
+-define(type_data, "data").
+-define(type_trailers, "trailers").
 
 
 
@@ -36,6 +36,7 @@ decode(Type, Filename) ->
   Status :: pos_integer(),
   Headers :: router_grpc_client:grpc_headers(),
   Dir :: list(),
+  OutPrefix :: list(),
   N :: integer(),
   OutSuffix :: list()
 ) ->
@@ -44,8 +45,8 @@ decode(Type, Filename) ->
     ErrorRet :: binary()
   ).
 
-encode_headers(Status, Headers, Dir, N, OutSuffix) ->
-  write_json(#{<<"status">> => Status, <<"headers">> => Headers}, Dir, ?prefix_headers, N, OutSuffix).
+encode_headers(Status, Headers, Dir, Prefix, N, OutSuffix) ->
+  write_json(#{<<"status">> => Status, <<"headers">> => Headers}, Dir, Prefix, N, ?type_headers, OutSuffix).
 
 
 
@@ -53,6 +54,7 @@ encode_headers(Status, Headers, Dir, N, OutSuffix) ->
   Type :: atom(),
   Data :: binary(),
   Dir :: list(),
+  OutPrefix :: list(),
   N :: integer(),
   Suffix :: list()
 ) ->
@@ -61,14 +63,15 @@ encode_headers(Status, Headers, Dir, N, OutSuffix) ->
     ErrorRet :: binary()
   ).
 
-encode_data(Type, Data, Dir, N, Suffix) ->
-  encode_data_grpc_decode(Type, Data, Dir, N, Suffix).
+encode_data(Type, Data, Dir, Prefix, N, Suffix) ->
+  encode_data_grpc_decode(Type, Data, Dir, Prefix, N, Suffix).
 
 
 
 -spec encode_trailers(
   Trailers :: router_grpc_client:grpc_headers(),
   Dir :: list(),
+  OutPrefix :: list(),
   N :: integer(),
   OutSuffix :: list()
 ) ->
@@ -76,8 +79,8 @@ encode_data(Type, Data, Dir, N, Suffix) ->
     OkRet :: list(),
     ErrorRet :: binary()
   ).
-encode_trailers(Trailers, Dir, N, OutSuffix) ->
-  write_json(#{<<"trailers">> => Trailers}, Dir, ?prefix_trailers, N, OutSuffix).
+encode_trailers(Trailers, Dir, Prefix, N, OutSuffix) ->
+  write_json(#{<<"trailers">> => Trailers}, Dir, Prefix, N, ?type_trailers, OutSuffix).
 
 
 
@@ -96,15 +99,16 @@ decode_readfile(Type, Filename) ->
 
 
 decode_parse(Type, Bin) ->
-  try
-    decode_grpc_encode(decode_map(Type, jsone:decode(Bin)))
+  try jsone:decode(Bin) of
+    Map -> decode_grpc_encode(decode_map(Type, Map))
   catch _T:E ->
     {error, ?format_error("Cannot parse input file contents (~p)", [E])}
   end.
 
 
 
-decode_grpc_encode(Record) -> {ok, registry_definitions:encode_msg(Record)}.
+decode_grpc_encode(Record) ->
+  {ok, registry_definitions:encode_msg(Record)}.
 
 
 
@@ -308,7 +312,7 @@ decode_map('lg.core.grpc.VirtualService.service' = _T, #{<<"stateless">> := Map}
   {stateless, decode_map('lg.core.grpc.VirtualService.StatelessVirtualService', Map)};
 
 decode_map('lg.core.grpc.VirtualService.service' = _T, #{<<"stateful">> := Map}) ->
-  {stateful, decode_map('lg.core.grpc.VirtualService.StatelfulVirtualService', Map)};
+  {stateful, decode_map('lg.core.grpc.VirtualService.StatefulVirtualService', Map)};
 
 decode_map('lg.core.trait.PaginationRq' = _T, Map) ->
   #'lg.core.trait.PaginationRq'{
@@ -350,12 +354,14 @@ decode_map('lg.core.network.PlainURI' = T, _Map) ->
 
 
 
-encode_data_grpc_decode(Type, Data, Dir, N, Suffix) ->
+encode_data_grpc_decode(Type, Data, Dir, Prefix, N, Suffix) ->
   Record = registry_definitions:decode_msg(Data, Type),
   Map = encode_data_map(Record),
-  write_json(Map, Dir, ?prefix_data, N, Suffix).
+  write_json(Map, Dir, Prefix, N, ?type_data, Suffix).
 
 
+
+encode_data_map(undefined) -> undefined;
 
 encode_data_map(#'lg.service.router.RegisterVirtualServiceRq'{
   virtual_service = VirtualService
@@ -594,10 +600,10 @@ encode_data_map(#'lg.core.network.PlainURI'{}) ->
 
 
 
-write_json(Map, Dir, Prefix, N, Suffix) ->
+write_json(Map, Dir, Prefix, N, Type, Suffix) ->
   try
-    Bin = jsone:encode(Map, [{indent, 2}, {space, 1}]),
-    Filename = ?out_filename(Dir, Prefix, N, Suffix),
+    Bin = jsone:encode(Map, [{indent, 2}, {space, 1}, undefined_as_null]),
+    Filename = ?out_filename(Dir, Prefix, N, Type, Suffix),
     case file:write_file(Filename, Bin) of
       ok ->
         {ok, Filename};

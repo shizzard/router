@@ -1,11 +1,13 @@
 {
   "virtual_service": {
-    "stateless": {
-      "package": "lg.test.package",
-      "name": "StatelessServiceC",
-      "methods": [
-        {"name": "MethodOne"}
-      ]
+    "service": {
+      "stateless": {
+        "package": "lg.test.package",
+        "name": "StatelessServiceC",
+        "methods": [
+          {"name": "MethodOne"}
+        ]
+      }
     },
     "endpoint": {
       "host": "test-1.lg",

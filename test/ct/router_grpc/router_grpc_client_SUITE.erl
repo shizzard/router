@@ -105,7 +105,7 @@ g_happy_path_request(Config) ->
     ?grpc_header_code => integer_to_binary(?grpc_code_ok),
     ?grpc_header_message => ?grpc_message_ok}
   ),
-  router_grpc_client:grpc_terminate(Client, StreamRef),
+  assert_stream_killed(StreamRef),
   dump_msgs().
 
 
@@ -151,8 +151,8 @@ g_happy_path_multiplexed_request(Config) ->
     ?grpc_header_code => integer_to_binary(?grpc_code_ok),
     ?grpc_header_message => ?grpc_message_ok
   }),
-  router_grpc_client:grpc_terminate(Client, StreamRef1),
-  router_grpc_client:grpc_terminate(Client, StreamRef2),
+  assert_stream_killed(StreamRef1),
+  assert_stream_killed(StreamRef2),
   dump_msgs().
 
 
@@ -250,6 +250,14 @@ assert_trailers(StreamRef, Trailers) ->
         ?assertEqual(TV, proplists:get_value(TK, Trailers_))
       end, Trailers)
   after ?rcv_timeout -> error(didnt_get_grpc_trailers)
+  end.
+
+
+
+assert_stream_killed(StreamRef) ->
+  receive
+    ?grpc_event_stream_killed(StreamRef) -> ok
+  after ?rcv_timeout -> error(didnt_get_stream_kill)
   end.
 
 

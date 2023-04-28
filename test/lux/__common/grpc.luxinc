@@ -1,13 +1,80 @@
-[macro grpc-call-unary proto infile outfile service method]
-  !${EVANS} \
-    --path ${ROUTER_DIR_PROTO} \
-    --proto ${proto} \
-    --host localhost \
-    --port ${ROUTER_APP_GRPC_LISTENER_PORT} \
-    --file ${infile} \
-    cli call --output json --enrich ${service}.${method} > ${outfile}
-  # Cannot check for exit code here, because evans exits with error in case
-  # of an error response, duh.
-  # [invoke check-ok]
-  ?${sh-prompt}
+[global grpc-prompt=GRPC-PROMPT:]
+
+[macro grpcc-start-unary service method outdir etc infile]
+  [progress (grpcc-unary ${service}/${method})]
+  [invoke grpcc-start ${service} ${method} ${outdir} ${etc}]
+  [invoke grpcc-conn-up]
+  [invoke grpcc-prompt]
+  [invoke grpcc-send-data ${infile}]
+  [progress (recv headers)]
+  [invoke grpcc-recv-headers]
+  [local headers=${out}]
+  [progress (recv data)]
+  [invoke grpcc-recv-data]
+  [local data=${out}]
+  [progress (recv trailers)]
+  [invoke grpcc-recv-trailers]
+  [local trailers=${out}]
+  [invoke grpcc-check-ok]
+[endmacro]
+
+[macro grpcc-start-unary-nodata service method outdir etc infile]
+  [progress (grpcc-unary ${service}/${method})]
+  [invoke grpcc-start ${service} ${method} ${outdir} ${etc}]
+  [invoke grpcc-conn-up]
+  [invoke grpcc-prompt]
+  [invoke grpcc-send-data ${infile}]
+  [progress (recv headers)]
+  [invoke grpcc-recv-headers]
+  [local headers=${out}]
+  [progress (recv trailers)]
+  [invoke grpcc-recv-trailers]
+  [local trailers=${out}]
+  [invoke grpcc-check-ok]
+[endmacro]
+
+[macro grpcc-start service method outdir etc]
+  !${RELEASE_TEST_BIN_CLI} grpcc \
+    --host 'localhost' \
+    --port '${ROUTER_APP_GRPC_LISTENER_PORT}' \
+    --service '${service}' \
+    --method '${method}' \
+    --outdir '${outdir}' \
+    --prompt '${grpc-prompt}' \
+    --out-prefix $$(basename ${LUX_EXTRA_LOGS} .lux.extra.logs).${LUX_SHELLNAME} \
+    --out-suffix response \
+    ${etc}
+  -${fail-pattern}
+[endmacro]
+
+[macro grpcc-conn-up]
+  ???Connection established
+[endmacro]
+
+[macro grpcc-prompt]
+  ??${grpc-prompt}
+[endmacro]
+
+[macro grpcc-send-data infile]
+  !${infile}
+[endmacro]
+
+[macro grpcc-recv-headers]
+  ?HEADERS:(.*)$
+  [local out=$1]
+[endmacro]
+
+[macro grpcc-recv-data]
+  ?DATA:(.*)$
+  [local out=$1]
+[endmacro]
+
+[macro grpcc-recv-trailers]
+  ?TRAILERS:(.*)$
+  [local out=$1]
+[endmacro]
+
+[macro grpcc-check-ok]
+  ???Stream closed
+  [invoke check-ok]
 [endmacro]

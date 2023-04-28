@@ -9,7 +9,7 @@
 -include_lib("typr/include/typr_specs_gen_server.hrl").
 
 -export([
-  restricted_packages/0, register/7, register/8, unregister/4, lookup/1, lookup_internal/1, lookup_external/1,
+  restricted_packages/0, register/7, register/8, unregister/5, lookup/1, lookup_internal/1, lookup_external/1,
   get_list/1, get_list/2, get_list/3, is_maintenance/3, set_maintenance/4
 ]).
 -export([start_link/2, init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -67,8 +67,8 @@
   {call_register_stateful, Type, Package, ServiceName, Methods, Cmp, Maintenance, Host, Port}
 ).
 -define(
-  call_unregister(Type, ServiceName, Host, Port),
-  {call_unregister, Type, ServiceName, Host, Port}
+  call_unregister(Type, Package, ServiceName, Host, Port),
+  {call_unregister, Type, Package, ServiceName, Host, Port}
 ).
 
 
@@ -128,6 +128,7 @@ register(stateful, Package, ServiceName, Methods, Cmp, Maintenance, Host, Port) 
 
 -spec unregister(
   Type :: service_type(),
+  Package :: service_package(),
   ServiceName :: service_name(),
   Host :: endpoint_host(),
   Port :: endpoint_port()
@@ -136,8 +137,8 @@ register(stateful, Package, ServiceName, Methods, Cmp, Maintenance, Host, Port) 
     ErrorRet :: term()
   ).
 
-unregister(Type, ServiceName, Host, Port) ->
-  gen_server:call(?MODULE, ?call_unregister(Type, ServiceName, Host, Port)).
+unregister(Type, Package, ServiceName, Host, Port) ->
+  gen_server:call(?MODULE, ?call_unregister(Type, Package, ServiceName, Host, Port)).
 
 
 
@@ -303,7 +304,7 @@ handle_call(?call_register_stateless(Type, Package, ServiceName, Methods, Mainte
     },
     ets:insert(S0#state.table_lookup, Definition)
   end, Methods),
-  RegistryId = ?table_registry_key(Type, ServiceName, Host, Port),
+  RegistryId = ?table_registry_key(Type, FqServiceName, Host, Port),
   RegistryDefinition = #router_grpc_service_registry_definition_external{
     id = RegistryId, type = Type, package = Package, service = ServiceName,
     fq_service = FqServiceName, methods = Methods, host = Host, port = Port
@@ -326,7 +327,7 @@ handle_call(?call_register_stateful(Type, Package, ServiceName, Methods, Cmp, Ma
     },
     ets:insert(S0#state.table_lookup, Definition)
   end, Methods),
-  RegistryId = ?table_registry_key(Type, ServiceName, Host, Port),
+  RegistryId = ?table_registry_key(Type, FqServiceName, Host, Port),
   RegistryDefinition = #router_grpc_service_registry_definition_external{
     id = RegistryId, type = Type, package = Package, service = ServiceName,
     fq_service = FqServiceName, methods = Methods, cmp = Cmp, host = Host, port = Port
@@ -338,8 +339,8 @@ handle_call(?call_register_stateful(Type, Package, ServiceName, Methods, Cmp, Ma
   end,
   {reply, ok, S0};
 
-handle_call(?call_unregister(Type, ServiceName, Host, Port), _GenReplyTo, S0) ->
-  handle_call_unregister(Type, ServiceName, Host, Port, S0);
+handle_call(?call_unregister(Type, Package, ServiceName, Host, Port), _GenReplyTo, S0) ->
+  handle_call_unregister(Type, Package, ServiceName, Host, Port, S0);
 
 handle_call(Unexpected, _GenReplyTo, S0) ->
   ?l_error(#{text => "Unexpected call", what => handle_call, details => Unexpected}),
@@ -377,11 +378,12 @@ code_change(_OldVsn, S0, _Extra) ->
 %% > Record construction
 %% > #router_grpc_service_registry_definition_external{id::{'_'},type::'_',package::'_',fq_service::'_',methods::'_'}
 %% > violates the declared type of ...
--dialyzer({nowarn_function, [handle_call_unregister/5]}).
-handle_call_unregister(Type, ServiceName, Host, Port, S0) ->
-  true = ets:delete(S0#state.table_registry, ?table_registry_key(Type, ServiceName, Host, Port)),
+-dialyzer({nowarn_function, [handle_call_unregister/6]}).
+handle_call_unregister(Type, Package, ServiceName, Host, Port, S0) ->
+  FqServiceName = <<Package/binary, ".", ServiceName/binary>>,
+  true = ets:delete(S0#state.table_registry, ?table_registry_key(Type, FqServiceName, Host, Port)),
   true = ets:match_delete(S0#state.table_lookup, #router_grpc_service_registry_definition_external{
-    id = ?table_lookup_key('_'), service = ServiceName, host = Host, port = Port, _ = '_'
+    service = ServiceName, host = Host, port = Port, _ = '_'
   }),
   {reply, ok, S0}.
 

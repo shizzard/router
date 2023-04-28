@@ -7,3 +7,9 @@
   ??${match}
   [invoke check-ok]
 [endmacro]
+
+[macro jq-check-file-empty infile filter]
+  !${JQ} -Mr 'if ${filter} == "" then "empty" else "not-empty" end' ${infile}
+  ???empty
+  [invoke check-ok]
+[endmacro]

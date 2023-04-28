@@ -275,27 +275,26 @@ unregister_virtual_service_handle(#'lg.service.router.UnregisterVirtualServiceRq
     endpoint = #'lg.core.network.Endpoint'{host = Host0, port = Port0}
   }
 }) ->
-  {Type, Package0, Name0} = case Service of
+  {Type, Package0, ServiceName0} = case Service of
     {stateless, #'lg.core.grpc.VirtualService.StatelessVirtualService'{
       package = Package00,
-      name = Name00
-    }} -> {stateless, Package00, Name00};
+      name = ServiceName00
+    }} -> {stateless, Package00, ServiceName00};
     {stateful, #'lg.core.grpc.VirtualService.StatefulVirtualService'{
       package = Package00,
-      name = Name00
-    }} -> {stateful, Package00, Name00}
+      name = ServiceName00
+    }} -> {stateful, Package00, ServiceName00}
   end,
   {PackageErrors, Package} = validate_package(Package0),
-  {NameErrors, Name} = validate_name(Name0),
+  {ServiceNameErrors, ServiceName} = validate_name(ServiceName0),
   {HostErrors, Host} = validate_host(Host0),
   {PortErrors, Port} = validate_port(Port0),
   ErrorList = lists:flatten([
-    PackageErrors, NameErrors, HostErrors, PortErrors
+    PackageErrors, ServiceNameErrors, HostErrors, PortErrors
   ]),
   case ErrorList of
     [] ->
-      ServiceName = <<Package/binary, ".", Name/binary>>,
-      ok = router_grpc_service_registry:unregister(Type, ServiceName, Host, Port),
+      ok = router_grpc_service_registry:unregister(Type, Package, ServiceName, Host, Port),
       {ok, #'lg.service.router.UnregisterVirtualServiceRs'{}};
     _ ->
       {error, maps:from_list(ErrorList)}

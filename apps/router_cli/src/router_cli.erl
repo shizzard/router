@@ -36,7 +36,11 @@ node_connect() ->
 -spec exit(Code :: non_neg_integer()) ->
   no_return().
 
-exit(Code) -> halt(Code).
+exit(Code) ->
+  %% When the node is shutting down, some IO is left unprocessed.
+  %% Find the proper solution later.
+  timer:sleep(500),
+  ok = erlang:halt(Code).
 
 
 

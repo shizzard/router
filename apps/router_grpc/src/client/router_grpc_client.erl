@@ -284,8 +284,7 @@ handle_event(info, ?msg_gun_trailers(ConnPid, StreamRef, Trailers), _State, #sta
     #caller{pid = Pid} ->
       Pid ! ?grpc_event_trailers(StreamRef, Trailers)
   end,
-  CI = callers_index_remove(StreamRef, CI0),
-  {keep_state, S0#state{callers_index = CI}};
+  {keep_state, S0};
 
 %% is_ready call;
 handle_event({call, From}, ?msg_is_ready(), ?fsm_state_on_gun_up() = _State, _S0) ->

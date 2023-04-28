@@ -1,8 +1,10 @@
 {
   "virtual_service": {
-    "stateless": {
-      "package": "lg.test.package",
-      "name": "StatelessServiceA"
+    "service": {
+      "stateless": {
+        "package": "lg.test.package",
+        "name": "StatelessServiceA"
+      }
     },
     "endpoint": {
       "host": "test.lg",

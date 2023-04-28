@@ -10,14 +10,14 @@
 [endmacro]
 
 [macro check-ok]
+  ?${sh-prompt}
   !echo ==$$?==
   ?==0==
   ?${sh-prompt}
 [endmacro]
 
 [macro app-start]
-  !substring="$${LUX_EXTRA_LOGS##*/}"; export LUX_TEST_CASE="$${substring%%.*}"
-  !export ROUTER_APP_LOGGER_LOG_ROOT="$${ROUTER_APP_LOGGER_LOG_ROOT}/$${LUX_TEST_CASE}"
+  !export ROUTER_APP_LOGGER_LOG_ROOT=${TEST_ROOT}/router_logs/$$(basename ${LUX_EXTRA_LOGS} .lux.extra.logs)
   !cd $$ROUTER_DIR_ROOT
   ?${sh-prompt}
   [progress (starting application)]
@@ -58,13 +58,5 @@
   !curl -s http://localhost:${ROUTER_APP_HTTP_API_PORT}/metrics | grep ${metric-name}
   ?${metric-name}
   ?^(.*)${metric-name}(.*)${metric-match}$
-  [invoke check-ok]
-[endmacro]
-
-[macro lag-queue-stats-check field-filter field-match]
-  [progress (checking lag queue: ${field-filter})]
-  !${RELEASE_TEST_BIN_CLI} lag-queue -s | grep ${field-filter}
-  ?${field-filter}
-  ?^(.*)${field-filter}(.*)${field-match}$
   [invoke check-ok]
 [endmacro]

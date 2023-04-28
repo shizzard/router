@@ -8,22 +8,19 @@ Check if router replies with empty list of registered virtual services.
 [include ../../__router/registry-service.luxinc]
 
 [global request-file-list=json/01-list-request.json]
-[global response-file-list=json/01-list-response.json]
 
 [shell router]
   [invoke app-start]
 
-[shell request]
+[shell list2]
   [progress (list)]
-  [invoke grpc-call-unary ${service-definition} ${request-file-list} ${response-file-list} ${service-name} ${method-list}]
-
-[shell response]
+  [invoke grpcc-start-unary ${grpc-service-name} ${grpc-method-list-virtual-services} "json" "" ${request-file-list}]
   [progress (check response)]
-  [invoke jq-check-file-match ${response-file-list} .header.\"content-type\" "application/grpc+proto"]
-  [invoke jq-check-file-match ${response-file-list} .header.\"grpc-user-agent\" "router/"]
-  [invoke jq-check-file-match ${response-file-list} .status.code OK]
-  [invoke jq-check-file-match ${response-file-list} .status.number 0]
-  [invoke jq-check-file-match ${response-file-list} .messages[0] "{}"]
-  [invoke jq-check-file-match ${response-file-list} .trailer "{}"]
+  [invoke jq-check-file-match ${headers} .headers.\"content-type\" "application/grpc+proto"]
+  [invoke jq-check-file-match ${headers} .headers.\"grpc-user-agent\" "router/"]
+  [invoke jq-check-file-match ${headers} .status 200]
+  [invoke jq-check-file-match ${data} .services "[]"]
+  [invoke jq-check-file-match ${trailers} .trailers.\"grpc-status\" 0]
+  [invoke jq-check-file-empty ${trailers} .trailers.\"grpc-message\"]
 
 [cleanup]
