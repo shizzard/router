@@ -6,3 +6,4 @@
 [global grpc-method-set-maintenance=EnableVirtualServiceMaintenance]
 [global grpc-method-unset-maintenance=DisableVirtualServiceMaintenance]
 [global grpc-method-list-virtual-services=ListVirtualServices]
+[global grpc-method-control-stream=ControlStream]

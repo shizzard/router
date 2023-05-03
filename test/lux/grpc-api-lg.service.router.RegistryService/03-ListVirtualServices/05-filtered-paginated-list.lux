@@ -2,6 +2,7 @@
 Check if router replies with a filtered and paginated list of registered virtual services.
 [enddoc]
 
+[include ../../__common/capture.luxinc]
 [include ../../__common/common.luxinc]
 [include ../../__common/grpc.luxinc]
 [include ../../__common/jq.luxinc]
@@ -75,9 +76,9 @@ Check if router replies with a filtered and paginated list of registered virtual
   [invoke jq-check-file-match ${trailers} .trailers.\"grpc-status\" 0]
   [invoke jq-check-file-empty ${trailers} .trailers.\"grpc-message\"]
   [invoke jq-check-file ${data} .pagination_response.next_page_token]
-  ?^([A-Za-z0-9=/]+)$
+  ?^(${capture-base64})$
   [global next-page-token=$1]
-  ?${sh-prompt}
+  [invoke check-ok]
   [progress (next page token ${next-page-token})]
 
 [shell list2]

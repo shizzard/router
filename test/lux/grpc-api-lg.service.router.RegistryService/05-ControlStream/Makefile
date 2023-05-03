@@ -1,0 +1,46 @@
+################################################################################
+# Prepare
+
+.EXPORT_ALL_VARIABLES:
+.ONESHELL:
+.DELETE_ON_ERROR:
+.SHELLFLAGS := -eu -o pipefail -c
+MAKEFLAGS += --warn-undefined-variables
+MAKEFLAGS += --no-builtin-rules
+SHELL := bash
+
+export TEST_ROOT := $(abspath ./)
+-include ./*.mk
+
+JQ := $(shell which jq)
+
+ifeq (, $(JQ))
+$(warning "No jq found, is it installed?")
+endif
+
+.PHONY: all
+all: clean-json
+	@$(TOOL_LUX) --doc 1 .
+	$(TOOL_LUX) --html enable .
+
+.PHONY: build
+build:
+
+.PHONY: clean
+clean: clean-json
+	rm -rf lux_logs router_logs
+
+.PHONY: clean-json
+TMP_RESPONSE_FILES := $(shell find . -type f -iname "*.response.json")
+TMP_REQUEST_FILES := $(shell find . -iname "*.template.json" -type f -exec bash -c 'f="$${1%.template.json}.json"; [ -e "$$f" ] && echo "$$f"' _ {} \;)
+clean-json:
+ifneq (,$(TMP_REQUEST_FILES))
+	rm -rf $(TMP_REQUEST_FILES)
+endif
+ifneq (,$(TMP_RESPONSE_FILES))
+	rm -rf $(TMP_RESPONSE_FILES)
+endif
+
+%.test:
+	@$(TOOL_LUX) --doc 1 $*.lux
+	$(TOOL_LUX) --html enable $*.lux

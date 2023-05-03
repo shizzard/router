@@ -7,7 +7,7 @@ permissions:
 
 jobs:
 
-  build:
+  check:
     strategy:
       matrix:
         version: [25]
@@ -58,6 +58,7 @@ jobs:
     - name: Lux
       run: make lux-tests
     - name: Upload Lux Artifacts
+      if: failure()
       uses: actions/upload-artifact@v3
       with:
         name: lux-tests-artifacts-${{ github.sha }}

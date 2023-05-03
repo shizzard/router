@@ -6,13 +6,10 @@
   [invoke grpcc-conn-up]
   [invoke grpcc-prompt]
   [invoke grpcc-send-data ${infile}]
-  [progress (recv headers)]
   [invoke grpcc-recv-headers]
   [local headers=${out}]
-  [progress (recv data)]
   [invoke grpcc-recv-data]
   [local data=${out}]
-  [progress (recv trailers)]
   [invoke grpcc-recv-trailers]
   [local trailers=${out}]
   [invoke grpcc-check-ok]
@@ -48,6 +45,7 @@
 [endmacro]
 
 [macro grpcc-conn-up]
+  [progress (connection up)]
   ???Connection established
 [endmacro]
 
@@ -56,25 +54,30 @@
 [endmacro]
 
 [macro grpcc-send-data infile]
+  [progress (send data)]
   !${infile}
 [endmacro]
 
 [macro grpcc-recv-headers]
+  [progress (recv headers)]
   ?HEADERS:(.*)$
   [local out=$1]
 [endmacro]
 
 [macro grpcc-recv-data]
+  [progress (recv data)]
   ?DATA:(.*)$
   [local out=$1]
 [endmacro]
 
 [macro grpcc-recv-trailers]
+  [progress (recv trailers)]
   ?TRAILERS:(.*)$
   [local out=$1]
 [endmacro]
 
 [macro grpcc-check-ok]
+  [progress (stream closed?)]
   ???Stream closed
   [invoke check-ok]
 [endmacro]
