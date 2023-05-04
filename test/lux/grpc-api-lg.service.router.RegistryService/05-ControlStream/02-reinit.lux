@@ -8,7 +8,7 @@ Check if router fails to reinit the stream.
 [include ../../__common/jq.luxinc]
 [include ../../__router/registry-service.luxinc]
 
-[global request-file-init=json/01-init-request.json]
+[global request-file-init=json/02-init-request.json]
 
 [shell router]
   [invoke app-start]
