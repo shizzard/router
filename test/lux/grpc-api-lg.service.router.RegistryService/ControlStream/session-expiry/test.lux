@@ -1,0 +1,68 @@
+[doc]
+Check if router handles session reinitialization within another stream.
+[enddoc]
+
+[include ${ROUTER_DIR_TESTS_LUX}/__common/capture.luxinc]
+[include ${ROUTER_DIR_TESTS_LUX}/__common/common.luxinc]
+[include ${ROUTER_DIR_TESTS_LUX}/__common/grpc.luxinc]
+[include ${ROUTER_DIR_TESTS_LUX}/__common/jq.luxinc]
+[include ${ROUTER_DIR_TESTS_LUX}/__router/registry-service.luxinc]
+
+[global request-file-init-1=json/init-request-1.json]
+[global template-file-init-2=json/init-request-2.template.json]
+[global request-file-init-2=json/init-request-2.json]
+
+[shell router]
+  [invoke app-start]
+
+[shell control-stream-1]
+  [progress (init)]
+  [invoke grpcc-start ${grpc-service-name} ${grpc-method-control-stream} json ""]
+  [invoke grpcc-conn-up]
+  [invoke grpcc-prompt]
+  [invoke grpcc-send-data ${request-file-init-1}]
+  [invoke grpcc-prompt]
+  [invoke grpcc-recv-headers]
+  [global headers=${out}]
+  [invoke grpcc-prompt]
+  [invoke grpcc-recv-data]
+  [global data=${out}]
+  [invoke grpcc-prompt]
+  [invoke grpcc-terminate]
+
+[shell jq-check]
+  [progress (check response)]
+  [invoke jq-check-file-match ${headers} .headers.\"content-type\" "application/grpc+proto"]
+  [invoke jq-check-file-match ${headers} .headers.\"grpc-user-agent\" "router/"]
+  [invoke jq-check-file-match ${headers} .status 200]
+  [invoke jq-check-file-match ${data} .event.init_rs.id.id "init-1"]
+  [invoke jq-check-file-match ${data} .event.init_rs.result.status SUCCESS]
+  [invoke jq-check-file ${data} .event.init_rs.session_id]
+  ?^(${capture-uuid})$
+  [global session-id=$1]
+  [invoke check-ok]
+  [progress (session id ${session-id})]
+
+[shell control-stream-2]
+  [progress (prepare second init request)]
+  !sed 's~%PLACEHOLDER%~${session-id}~' ${template-file-init-2} > ${request-file-init-2}
+  ?${sh-prompt}
+  [progress (init)]
+  [invoke grpcc-start ${grpc-service-name} ${grpc-method-control-stream} json ""]
+  [invoke grpcc-conn-up]
+  [invoke grpcc-prompt]
+  [invoke grpcc-send-data ${request-file-init-2}]
+  [invoke grpcc-prompt]
+  [invoke grpcc-recv-headers]
+  [global headers=${out}]
+  [invoke grpcc-recv-trailers]
+  [global trailers=${out}]
+  [invoke grpcc-check-ok]
+
+[shell jq-check]
+  [progress (check response)]
+  [invoke jq-check-file-match ${trailers} .trailers.\"grpc-status\" 3]
+  [invoke jq-check-file-match ${trailers} .trailers.\"grpc-message\" "Invalid payload"]
+  [invoke jq-check-file-match ${trailers} .trailers.\"session_expired\" "Session identified by provided id already expired"]
+
+[cleanup]

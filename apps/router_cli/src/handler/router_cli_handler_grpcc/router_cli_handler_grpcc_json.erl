@@ -176,7 +176,7 @@ decode_map('lg.service.router.ListVirtualServicesRs' = _T, Map) ->
 decode_map('lg.service.router.ControlStreamEvent.InitRq' = _T, Map) ->
   #'lg.service.router.ControlStreamEvent.InitRq'{
     id = decode_map('lg.core.trait.Id', maps:get(<<"id">>, Map, undefined)),
-    session_id = decode_map('lg.core.trait.Id', maps:get(<<"session_id">>, Map, undefined)),
+    session_id = maps:get(<<"session_id">>, Map, undefined),
     endpoint = decode_map('lg.core.network.Endpoint', maps:get(<<"endpoint">>, Map, undefined))
   };
 

@@ -1,0 +1,12 @@
+{
+  "event": {
+    "init_rq": {
+      "id": {"id": "init-2"},
+      "session_id": "%PLACEHOLDER%",
+      "endpoint": {
+        "host": "test.lg",
+        "port": 8137
+      }
+    }
+  }
+}

@@ -81,3 +81,9 @@
   ???Stream closed
   [invoke check-ok]
 [endmacro]
+
+[macro grpcc-terminate]
+  [progress (terminate)]
+  !${_CTRL_D_}
+  [invoke check-ok]
+[endmacro]

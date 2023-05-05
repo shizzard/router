@@ -483,7 +483,8 @@ control_stream_handle(#'lg.service.router.ControlStreamEvent'{
           }, S0#state{session_id = SessionId, handler_pid = HPid}}};
         {error, undefined} ->
           {error, {
-            [{?trailer_control_stream_session_expired, ?trailer_control_stream_session_expired_message(undefined)}], S0
+            #{?trailer_control_stream_session_expired => ?trailer_control_stream_session_expired_message(undefined)},
+            S0
           }}
       end;
     Trailers -> {error, {Trailers, S0}}
@@ -702,4 +703,4 @@ validate_id(#'lg.core.trait.Id'{id = Id} = IdRecord) when byte_size(Id) > 0 -> {
 
 
 
-validate_session_id(SessionId) -> {undefined, SessionId}.
+validate_session_id(SessionId) -> {[], SessionId}.
