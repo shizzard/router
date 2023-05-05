@@ -1,0 +1,22 @@
+{
+  "event": {
+    "register_virtual_service_rq": {
+      "id": {"id": "register-1"},
+      "virtual_service": {
+        "service": {
+          "stateless": {
+            "package": "lg.test.package",
+            "name": "StatelessServiceA",
+            "methods": [
+              {"name": "MethodOne"}
+            ]
+          }
+        },
+        "endpoint": {
+          "host": "test.lg",
+          "port": 8137
+        }
+      }
+    }
+  }
+}

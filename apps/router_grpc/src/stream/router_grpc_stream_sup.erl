@@ -4,7 +4,7 @@
 -include_lib("router_log/include/router_log.hrl").
 -include_lib("typr/include/typr_specs_supervisor.hrl").
 
--export([start_handler/3, start_link/0, init/1]).
+-export([start_handler/3, lookup_handler/1, start_link/0, init/1]).
 
 
 
@@ -21,6 +21,19 @@
 
 start_handler(SessionId, Host, Port) ->
   supervisor:start_child(?MODULE, [SessionId, Host, Port, self()]).
+
+
+
+-spec lookup_handler(
+  SessionId :: router_grpc_stream_h:session_id()
+) ->
+  type:ok_return(OkRet :: pid(), ErrorRet :: undefined).
+
+lookup_handler(SessionId) ->
+  case router_grpc_stream_h:lookup(SessionId) of
+    undefined -> {error, undefined};
+    Pid -> {ok, Pid}
+  end.
 
 
 

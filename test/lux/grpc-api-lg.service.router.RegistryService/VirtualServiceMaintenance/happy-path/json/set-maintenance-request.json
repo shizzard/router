@@ -1,0 +1,14 @@
+{
+  "virtual_service": {
+    "service": {
+      "stateless": {
+        "package": "lg.test.package",
+        "name": "StatelessService"
+      }
+    },
+    "endpoint": {
+      "host": "test.lg",
+      "port": 8137
+    }
+  }
+}

@@ -7,3 +7,4 @@ erl_crash.dump
 *.crashdump
 *.beam
 .plt
+lux_history*

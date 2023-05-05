@@ -447,9 +447,8 @@ control_stream_handle(#'lg.service.router.ControlStreamEvent'{
     id = IdRecord0, session_id = <<>>,
     endpoint = #'lg.core.network.Endpoint'{host = Host0, port = Port0}
   }}
-}, S0) ->
+}, #state{session_id = undefined, handler_pid = undefined} = S0) ->
   {IdRecordErrors, IdRecord} = validate_id(IdRecord0),
-  % {SessionErrors, <<>>} = validate_session_id(SessionId0),
   {HostErrors, Host} = validate_host(Host0),
   {PortErrors, Port} = validate_port(Port0),
   ErrorList = lists:flatten([IdRecordErrors, HostErrors, PortErrors]),
@@ -462,6 +461,31 @@ control_stream_handle(#'lg.service.router.ControlStreamEvent'{
           id = IdRecord, session_id = SessionId, result = #'lg.core.trait.Result'{status = 'SUCCESS'}
         }}
       }, S0#state{session_id = SessionId, handler_pid = HPid}}};
+    Trailers -> {error, {Trailers, S0}}
+  end;
+
+control_stream_handle(#'lg.service.router.ControlStreamEvent'{
+  event = {init_rq, #'lg.service.router.ControlStreamEvent.InitRq'{
+    id = IdRecord0, session_id = SessionId0
+  }}
+}, #state{session_id = undefined, handler_pid = undefined} = S0) ->
+  {IdRecordErrors, IdRecord} = validate_id(IdRecord0),
+  {SessionErrors, SessionId} = validate_session_id(SessionId0),
+  ErrorList = lists:flatten([IdRecordErrors, SessionErrors]),
+  case ErrorList of
+    [] ->
+      case router_grpc_stream_sup:lookup_handler(SessionId) of
+        {ok, HPid} ->
+          {ok, {#'lg.service.router.ControlStreamEvent'{
+            event = {init_rs, #'lg.service.router.ControlStreamEvent.InitRs'{
+              id = IdRecord, session_id = SessionId, result = #'lg.core.trait.Result'{status = 'SUCCESS'}
+            }}
+          }, S0#state{session_id = SessionId, handler_pid = HPid}}};
+        {error, undefined} ->
+          {error, {
+            [{?trailer_control_stream_session_expired, ?trailer_control_stream_session_expired_message(undefined)}], S0
+          }}
+      end;
     Trailers -> {error, {Trailers, S0}}
   end;
 
@@ -678,4 +702,4 @@ validate_id(#'lg.core.trait.Id'{id = Id} = IdRecord) when byte_size(Id) > 0 -> {
 
 
 
-% validate_session_id(SessionId) -> {undefined, SessionId}.
+validate_session_id(SessionId) -> {undefined, SessionId}.

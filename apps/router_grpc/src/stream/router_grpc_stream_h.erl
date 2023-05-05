@@ -17,6 +17,7 @@
   port :: router_grpc_service_registry:endpoint_port(),
   conn_pid :: pid() | undefined,
   conn_monitor_ref :: reference() | undefined,
+  session_inactivity_limit_ms :: pos_integer(),
   session_ref :: reference() | undefined,
   session_timer_ref :: reference() | undefined
 }).
@@ -26,8 +27,6 @@
 -export_type([session_id/0]).
 
 -define(gproc_key(Id), {?MODULE, Id}).
-
--define(session_inactivity_limit_ms, 15_000).
 
 
 
@@ -71,7 +70,11 @@ init({SessionId, Host, Port, ConnPid}) ->
   router_log:component(router_grpc),
   ok = quickrand:seed(),
   ok = init_prometheus_metrics(),
-  S0 = #state{session_id = SessionId, host = Host, port = Port, conn_pid = ConnPid},
+  {ok, Limit} = router_config:get(router_grpc, [session, inactivity_limit_ms]),
+  S0 = #state{
+    session_id = SessionId, host = Host, port = Port, conn_pid = ConnPid,
+    session_inactivity_limit_ms = Limit
+  },
   case init_register(S0) of
     {ok, S1} ->
       ?l_debug(#{
@@ -118,10 +121,12 @@ handle_cast(Unexpected, S0) ->
 
 
 
-handle_info(?msg_session_inactivity_trigger(Ref), #state{session_ref = Ref} = S0) ->
+handle_info(?msg_session_inactivity_trigger(Ref), #state{
+  session_inactivity_limit_ms = Limit, session_ref = Ref
+} = S0) ->
   ?l_debug(#{
     text => "Stream session expired", what => handle_info,
-    details => #{stream_id => S0#state.session_id, inactivity_limit_ms => ?session_inactivity_limit_ms}
+    details => #{stream_id => S0#state.session_id, inactivity_limit_ms => Limit}
   }),
   {stop, shutdown, S0};
 
@@ -154,11 +159,12 @@ code_change(_OldVsn, S0, _Extra) ->
 
 
 init_session_timer(#state{
+  session_inactivity_limit_ms = Limit,
   session_ref = undefined,
   session_timer_ref = undefined
 } = S0) ->
   Ref = erlang:make_ref(),
-  TRef = erlang:send_after(?session_inactivity_limit_ms, self(), ?msg_session_inactivity_trigger(Ref)),
+  TRef = erlang:send_after(Limit, self(), ?msg_session_inactivity_trigger(Ref)),
   {ok, S0#state{session_ref = Ref, session_timer_ref = TRef}};
 
 init_session_timer(#state{

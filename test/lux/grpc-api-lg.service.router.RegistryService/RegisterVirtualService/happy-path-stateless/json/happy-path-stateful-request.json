@@ -1,0 +1,18 @@
+{
+  "virtual_service": {
+    "service": {
+      "stateful": {
+        "package": "lg.test.package",
+        "name": "StatefulService",
+        "methods": [
+          {"name": "MethodOne"}
+        ],
+        "cmp": "BLOCKING"
+      }
+    },
+    "endpoint": {
+      "host": "test.lg",
+      "port": 8137
+    }
+  }
+}

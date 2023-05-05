@@ -149,28 +149,40 @@ common-tests:
 
 .PHONY: lux-tests
 ROUTER_DIR_TESTS_LUX := $(ROUTER_DIR_TESTS)/lux
-lux-tests: $(RELEASE_TEST_BIN) $(RELEASE_TEST_BIN_CLI) $(TOOL_LUX)
-	@echo ":: LUX RUN"
-ifeq (,$(TEST))
-	@$(foreach dir,\
-		$(shell $(TOOL_LUX) --mode=list_dir $(ROUTER_DIR_TESTS_LUX)),\
-		echo; echo " -> TESTCASE $(dir)"; $(MAKE) -C $(dir) build all; echo;)
+ifeq (,$(SCOPE))
+	TEST_CASES := $(shell $(TOOL_LUX) --mode=list_dir $(ROUTER_DIR_TESTS_LUX))
 else
-	@echo; \
-		echo " -> TESTCASE $(shell dirname $(TEST))"; \
-		$(MAKE) -C $(shell dirname $(TEST)) build $(shell basename $(TEST) | cut -f 1 -d '.').test; \
-		echo;
+	TEST_CASES := $(shell $(TOOL_LUX) --mode=list_dir $(ROUTER_DIR_TESTS_LUX) | grep $(SCOPE))
 endif
-	@echo ":: LUX END"
+lux-tests: $(RELEASE_TEST_BIN) $(RELEASE_TEST_BIN_CLI) $(TOOL_LUX)
+	@echo ":: LUX RUN"; \
+	FAILED_CASES=""; \
+	EXIT_STATUS=0; \
+	for dir in $(TEST_CASES); do\
+		echo -e " -> TEST CASE $$dir"; \
+		$(MAKE) -C $$dir build all; \
+		EXIT_CODE=$$?; \
+		if [ $$EXIT_CODE -ne 0 ]; then \
+			FAILED_CASES=$$(echo -e "$$FAILED_CASES\n$$dir (file://`realpath $$dir`/lux_logs/latest_run/lux_summary.log.html)"); \
+		fi; \
+		EXIT_STATUS=$$(expr $$EXIT_STATUS + $$EXIT_CODE); \
+	done; \
+	if [ $$EXIT_STATUS -ne 0 ]; then \
+		echo -e "\nFailed cases: $$FAILED_CASES"; \
+	fi; \
+	echo -e ":: LUX END\n"; \
+	exit $$EXIT_STATUS;
 
 .PHONY: lux-clean
 ROUTER_DIR_TESTS_LUX := $(ROUTER_DIR_TESTS)/lux
 lux-clean: $(RELEASE_TEST_BIN) $(RELEASE_TEST_BIN_CLI) $(TOOL_LUX)
-	@echo ":: LUX CLEAN"
-	@$(foreach dir,\
-		$(shell $(TOOL_LUX) --mode=list_dir $(ROUTER_DIR_TESTS_LUX)),\
-		echo; echo " -> TESTCASE $(dir)"; $(MAKE) -C $(dir) clean; echo;)
-	@echo ":: LUX END"
+	@echo ":: LUX CLEAN"; \
+	for dir in $(TEST_CASES); do \
+		echo; \
+		echo " -> TEST CASE $$dir"; \
+		$(MAKE) -C $$dir clean; \
+	done; \
+	echo -e ":: LUX END\n";
 
 ################################################################################
 # Erlang clean
