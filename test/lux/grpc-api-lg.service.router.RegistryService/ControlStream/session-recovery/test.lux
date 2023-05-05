@@ -34,7 +34,7 @@ Check if router handles session reinitialization within another stream.
   [invoke jq-check-file-match ${headers} .headers.\"content-type\" "application/grpc+proto"]
   [invoke jq-check-file-match ${headers} .headers.\"grpc-user-agent\" "router/"]
   [invoke jq-check-file-match ${headers} .status 200]
-  [invoke jq-check-file-match ${data} .event.init_rs.id.id "init-1"]
+  [invoke jq-check-file-match ${data} .id.tag "init-1"]
   [invoke jq-check-file-match ${data} .event.init_rs.result.status SUCCESS]
   [invoke jq-check-file ${data} .event.init_rs.session_id]
   ?^(${capture-uuid})$
@@ -64,7 +64,7 @@ Check if router handles session reinitialization within another stream.
   [invoke jq-check-file-match ${headers} .headers.\"content-type\" "application/grpc+proto"]
   [invoke jq-check-file-match ${headers} .headers.\"grpc-user-agent\" "router/"]
   [invoke jq-check-file-match ${headers} .status 200]
-  [invoke jq-check-file-match ${data} .event.init_rs.id.id "init-2"]
+  [invoke jq-check-file-match ${data} .id.tag "init-2"]
   [invoke jq-check-file-match ${data} .event.init_rs.result.status SUCCESS]
   [invoke jq-check-file-match ${data} .event.init_rs.session_id ${session-id}]
   [progress (session id ${session-id})]

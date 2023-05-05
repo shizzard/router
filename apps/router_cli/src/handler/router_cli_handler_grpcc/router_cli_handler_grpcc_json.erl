@@ -175,21 +175,18 @@ decode_map('lg.service.router.ListVirtualServicesRs' = _T, Map) ->
 
 decode_map('lg.service.router.ControlStreamEvent.InitRq' = _T, Map) ->
   #'lg.service.router.ControlStreamEvent.InitRq'{
-    id = decode_map('lg.core.trait.Id', maps:get(<<"id">>, Map, undefined)),
     session_id = maps:get(<<"session_id">>, Map, undefined),
     endpoint = decode_map('lg.core.network.Endpoint', maps:get(<<"endpoint">>, Map, undefined))
   };
 
 decode_map('lg.service.router.ControlStreamEvent.InitRs' = _T, Map) ->
   #'lg.service.router.ControlStreamEvent.InitRs'{
-    id = decode_map('lg.core.trait.Id', maps:get(<<"id">>, Map, undefined)),
     session_id = decode_map('lg.core.trait.Id', maps:get(<<"session_id">>, Map, undefined)),
     result = decode_map('lg.core.network.Endpoint', maps:get(<<"result">>, Map, undefined))
   };
 
 decode_map('lg.service.router.ControlStreamEvent.RegisterVirtualServiceRq' = _T, Map) ->
   #'lg.service.router.ControlStreamEvent.RegisterVirtualServiceRq'{
-    id = decode_map('lg.core.trait.Id', maps:get(<<"id">>, Map, undefined)),
     virtual_service = decode_map(
       'lg.core.grpc.VirtualService',
       maps:get(<<"virtual_service">>, Map, undefined)
@@ -198,13 +195,11 @@ decode_map('lg.service.router.ControlStreamEvent.RegisterVirtualServiceRq' = _T,
 
 decode_map('lg.service.router.ControlStreamEvent.RegisterVirtualServiceRs' = _T, Map) ->
   #'lg.service.router.ControlStreamEvent.RegisterVirtualServiceRs'{
-    id = decode_map('lg.core.trait.Id', maps:get(<<"id">>, Map, undefined)),
     result = decode_map('lg.core.network.Endpoint', maps:get(<<"result">>, Map, undefined))
   };
 
 decode_map('lg.service.router.ControlStreamEvent.RegisterAgentRq' = _T, Map) ->
   #'lg.service.router.ControlStreamEvent.RegisterAgentRq'{
-    id = decode_map('lg.core.trait.Id', maps:get(<<"id">>, Map, undefined)),
     fq_service_name = maps:get(<<"fq_service_name">>, Map, undefined),
     agent_id = maps:get(<<"agent_id">>, Map, undefined),
     agent_instance = maps:get(<<"agent_instance">>, Map, undefined)
@@ -212,7 +207,6 @@ decode_map('lg.service.router.ControlStreamEvent.RegisterAgentRq' = _T, Map) ->
 
 decode_map('lg.service.router.ControlStreamEvent.RegisterAgentRs' = _T, Map) ->
   #'lg.service.router.ControlStreamEvent.RegisterAgentRs'{
-    id = decode_map('lg.core.trait.Id', maps:get(<<"id">>, Map, undefined)),
     agent_id = maps:get(<<"agent_id">>, Map, undefined),
     agent_instance = maps:get(<<"agent_instance">>, Map, undefined),
     result = decode_map('lg.core.network.Endpoint', maps:get(<<"result">>, Map, undefined))
@@ -220,7 +214,6 @@ decode_map('lg.service.router.ControlStreamEvent.RegisterAgentRs' = _T, Map) ->
 
 decode_map('lg.service.router.ControlStreamEvent.UnregisterAgentRq' = _T, Map) ->
   #'lg.service.router.ControlStreamEvent.UnregisterAgentRq'{
-    id = decode_map('lg.core.trait.Id', maps:get(<<"id">>, Map, undefined)),
     fq_service_name = maps:get(<<"fq_service_name">>, Map, undefined),
     agent_id = maps:get(<<"agent_id">>, Map, undefined),
     agent_instance = maps:get(<<"agent_instance">>, Map, undefined)
@@ -228,13 +221,11 @@ decode_map('lg.service.router.ControlStreamEvent.UnregisterAgentRq' = _T, Map) -
 
 decode_map('lg.service.router.ControlStreamEvent.UnregisterAgentRs' = _T, Map) ->
   #'lg.service.router.ControlStreamEvent.UnregisterAgentRs'{
-    id = decode_map('lg.core.trait.Id', maps:get(<<"id">>, Map, undefined)),
     result = decode_map('lg.core.network.Endpoint', maps:get(<<"result">>, Map, undefined))
   };
 
 decode_map('lg.service.router.ControlStreamEvent.ConflictEvent' = _T, Map) ->
   #'lg.service.router.ControlStreamEvent.ConflictEvent'{
-    id = decode_map('lg.core.trait.Id', maps:get(<<"id">>, Map, undefined)),
     fq_service_name = maps:get(<<"fq_service_name">>, Map, undefined),
     agent_id = maps:get(<<"agent_id">>, Map, undefined),
     agent_instance = maps:get(<<"agent_instance">>, Map, undefined),
@@ -243,6 +234,7 @@ decode_map('lg.service.router.ControlStreamEvent.ConflictEvent' = _T, Map) ->
 
 decode_map('lg.service.router.ControlStreamEvent' = _T, Map) ->
   #'lg.service.router.ControlStreamEvent'{
+    id = decode_map('lg.core.trait.Id', maps:get(<<"id">>, Map, undefined)),
     event = decode_map('lg.service.router.ControlStreamEvent.event', maps:get(<<"event">>, Map, undefined))
   };
 
@@ -327,7 +319,7 @@ decode_map('lg.core.trait.PaginationRs' = _T, Map) ->
 
 decode_map('lg.core.trait.Id' = _T, Map) ->
   #'lg.core.trait.Id'{
-    id = maps:get(<<"id">>, Map, undefined)
+    tag = maps:get(<<"tag">>, Map, undefined)
   };
 
 decode_map('lg.core.trait.Result' = _T, Map) ->
@@ -412,110 +404,98 @@ encode_data_map(#'lg.service.router.ListVirtualServicesRs'{
   };
 
 encode_data_map(#'lg.service.router.ControlStreamEvent.InitRq'{
-  id = Id,
   session_id = SessionId,
   endpoint = Endpoint
 }) ->
   #{
-    <<"id">> => encode_data_map(Id),
     <<"session_id">> => SessionId,
     <<"endpoint">> => encode_data_map(Endpoint)
   };
 
 encode_data_map(#'lg.service.router.ControlStreamEvent.InitRs'{
-  id = Id,
   session_id = SessionId,
   result = Result
 }) ->
   #{
-    <<"id">> => encode_data_map(Id),
     <<"session_id">> => SessionId,
     <<"result">> => encode_data_map(Result)
   };
 
 encode_data_map(#'lg.service.router.ControlStreamEvent.RegisterVirtualServiceRq'{
-  id = Id,
   virtual_service = VirtualService
 }) ->
   #{
-    <<"id">> => encode_data_map(Id),
     <<"virtual_service">> => encode_data_map(VirtualService)
   };
 
 encode_data_map(#'lg.service.router.ControlStreamEvent.RegisterVirtualServiceRs'{
-  id = Id,
   result = Result
 }) ->
   #{
-    <<"id">> => encode_data_map(Id),
     <<"result">> => encode_data_map(Result)
   };
 
 encode_data_map(#'lg.service.router.ControlStreamEvent.RegisterAgentRq'{
-  id = Id,
   fq_service_name = FqServiceName,
   agent_id = AgentId,
   agent_instance = AgentInstance
 }) ->
   #{
-    <<"id">> => encode_data_map(Id),
     <<"fq_service_name">> => FqServiceName,
     <<"agent_id">> => AgentId,
     <<"agent_instance">> => AgentInstance
   };
 
 encode_data_map(#'lg.service.router.ControlStreamEvent.RegisterAgentRs'{
-  id = Id,
   agent_id = AgentId,
   agent_instance = AgentInstance,
   result = Result
 }) ->
   #{
-    <<"id">> => encode_data_map(Id),
     <<"agent_id">> => AgentId,
     <<"agent_instance">> => AgentInstance,
     <<"result">> => encode_data_map(Result)
   };
 
 encode_data_map(#'lg.service.router.ControlStreamEvent.UnregisterAgentRq'{
-  id = Id,
   fq_service_name = FqServiceName,
   agent_id = AgentId,
   agent_instance = AgentInstance
 }) ->
   #{
-    <<"id">> => encode_data_map(Id),
     <<"fq_service_name">> => FqServiceName,
     <<"agent_id">> => AgentId,
     <<"agent_instance">> => AgentInstance
   };
 
 encode_data_map(#'lg.service.router.ControlStreamEvent.UnregisterAgentRs'{
-  id = Id,
   result = Result
 }) ->
   #{
-    <<"id">> => encode_data_map(Id),
     <<"result">> => encode_data_map(Result)
   };
 
 encode_data_map(#'lg.service.router.ControlStreamEvent.ConflictEvent'{
-  id = Id,
   fq_service_name = FqServiceName,
   agent_id = AgentId,
   agent_instance = AgentInstance,
   reason = Reason
 }) ->
   #{
-    <<"id">> => encode_data_map(Id),
     <<"fq_service_name">> => FqServiceName,
     <<"agent_id">> => AgentId,
     <<"agent_instance">> => AgentInstance,
     <<"reason">> => Reason
   };
 
-encode_data_map(#'lg.service.router.ControlStreamEvent'{event = {TypeAtom, Event}}) ->
-  #{<<"event">> => #{atom_to_binary(TypeAtom) => encode_data_map(Event)}};
+encode_data_map(#'lg.service.router.ControlStreamEvent'{
+  id = Id,
+  event = {TypeAtom, Event}}
+) ->
+  #{
+    <<"id">> => encode_data_map(Id),
+    <<"event">> => #{atom_to_binary(TypeAtom) => encode_data_map(Event)}
+  };
 
 encode_data_map(#'lg.core.grpc.VirtualService.Method'{name = Name}) ->
   #{<<"name">> => Name};
@@ -567,8 +547,8 @@ encode_data_map(#'lg.core.trait.PaginationRq'{
 encode_data_map(#'lg.core.trait.PaginationRs'{next_page_token = NextPageToken}) ->
   #{<<"next_page_token">> => NextPageToken};
 
-encode_data_map(#'lg.core.trait.Id'{id = Id}) ->
-  #{<<"id">> => Id};
+encode_data_map(#'lg.core.trait.Id'{tag = Id}) ->
+  #{<<"tag">> => Id};
 
 encode_data_map(#'lg.core.trait.Result'{
   status = Status,

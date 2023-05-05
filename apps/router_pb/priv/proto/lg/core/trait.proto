@@ -58,7 +58,14 @@ message PaginationRs {
   requests and responses.
 */
 message Id {
-  string id = 1;
+  /*
+    The `tag` field represents a unique identifier for the entity.
+    It is intended to store a UUID (Universally Unique Identifier) value,
+    ensuring that each entity can be unambiguously identified across distributed
+    systems. UUIDs are typically represented as a string containing 32
+    hexadecimal digits separated by hyphens, following the 8-4-4-12 format.
+  */
+  string tag = 1;
 }
 
 

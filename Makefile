@@ -159,7 +159,7 @@ lux-tests: $(RELEASE_TEST_BIN) $(RELEASE_TEST_BIN_CLI) $(TOOL_LUX)
 	FAILED_CASES=""; \
 	EXIT_STATUS=0; \
 	for dir in $(TEST_CASES); do\
-		echo -e " -> TEST CASE $$dir"; \
+		echo -e "\n -> TEST CASE $$dir"; \
 		$(MAKE) -C $$dir build all; \
 		EXIT_CODE=$$?; \
 		if [ $$EXIT_CODE -ne 0 ]; then \
@@ -179,7 +179,7 @@ lux-clean: $(RELEASE_TEST_BIN) $(RELEASE_TEST_BIN_CLI) $(TOOL_LUX)
 	@echo ":: LUX CLEAN"; \
 	for dir in $(TEST_CASES); do \
 		echo; \
-		echo " -> TEST CASE $$dir"; \
+		echo -e "\n -> TEST CASE $$dir"; \
 		$(MAKE) -C $$dir clean; \
 	done; \
 	echo -e ":: LUX END\n";

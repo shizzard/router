@@ -146,24 +146,18 @@ message ControlStreamEvent {
   */
   message InitRq {
     /*
-      The request ID, represented by an Id message from the lg.core.trait
-      package.
-    */
-    lg.core.trait.Id id = 1;
-
-    /*
       The session ID for resuming a previous session.
       - Must be empty when initiating a new stream with no previous context.
       - Must be set to the session identifier of a previously ended stream
         when reconnecting to the session and resuming it.
     */
-    string session_id = 2;
+    string session_id = 1;
 
     /*
       The network endpoint associated with the virtual service, as defined
       in the lg.core.network package.
     */
-    lg.core.network.Endpoint endpoint = 3;
+    lg.core.network.Endpoint endpoint = 2;
   }
 
 
@@ -176,16 +170,10 @@ message ControlStreamEvent {
   */
   message InitRs {
     /*
-      The request ID, represented by an Id message from the lg.core.trait
-      package.
-    */
-    lg.core.trait.Id id = 1;
-
-    /*
       The session ID for resuming a disrupted session. The client must retain
       this string and use it when reconnecting and resuming a disrupted session.
     */
-    string session_id = 2;
+    string session_id = 1;
 
     /*
       The Result object from the lg.core.trait package, indicating the outcome
@@ -193,7 +181,7 @@ message ControlStreamEvent {
       - ERROR_INVALID_ARGUMENT
       - ERROR_ENDPOINT_UNREACHABLE
     */
-    lg.core.trait.Result result = 3;
+    lg.core.trait.Result result = 2;
   }
 
 
@@ -205,16 +193,10 @@ message ControlStreamEvent {
   */
   message RegisterVirtualServiceRq {
     /*
-      The ID of the virtual service to be registered, represented by an Id
-      message from the lg.core.trait package.
-    */
-    lg.core.trait.Id id = 1;
-
-    /*
       The VirtualService object associated with the virtual service, as
       defined in the lg.core.grpc package.
     */
-    lg.core.grpc.VirtualService virtual_service = 2;
+    lg.core.grpc.VirtualService virtual_service = 1;
   }
 
 
@@ -228,17 +210,11 @@ message ControlStreamEvent {
   */
   message RegisterVirtualServiceRs {
     /*
-      The request ID, represented by an Id message from the lg.core.trait
-      package.
-    */
-    lg.core.trait.Id id = 1;
-
-    /*
       The Result object from the lg.core.trait package, indicating the outcome
       of the registration request. Possible error codes include:
       - ERROR_INVALID_ARGUMENT
     */
-    lg.core.trait.Result result = 2;
+    lg.core.trait.Result result = 1;
   }
 
 
@@ -251,21 +227,15 @@ message ControlStreamEvent {
   */
   message RegisterAgentRq {
     /*
-      The request ID, represented by an Id message from the lg.core.trait
-      package.
-    */
-    lg.core.trait.Id id = 1;
-
-    /*
       The fully-qualified virtual service name for which the agent is being
       registered.
     */
-    string fq_service_name = 2;
+    string fq_service_name = 1;
 
     /*
       The required agent ID.
     */
-    string agent_id = 3;
+    string agent_id = 2;
 
     /*
       The agent instance ID.
@@ -273,7 +243,7 @@ message ControlStreamEvent {
       - To register the agent as a singleton, set this field equal to the
         agent_id value.
     */
-    string agent_instance = 4;
+    string agent_instance = 3;
   }
 
 
@@ -287,19 +257,14 @@ message ControlStreamEvent {
   */
   message RegisterAgentRs {
     /*
-      The request ID, represented by an Id message from the lg.core.trait package.
-    */
-    lg.core.trait.Id id = 1;
-
-    /*
       The agent ID.
     */
-    string agent_id = 3;
+    string agent_id = 1;
 
     /*
       The agent instance ID.
     */
-    string agent_instance = 4;
+    string agent_instance = 2;
 
     /*
       The Result object from the lg.core.trait package, indicating the outcome
@@ -308,7 +273,7 @@ message ControlStreamEvent {
       - ERROR_UNKNOWN_VIRTUAL_SERVICE
       - ERROR_CONFLICT
     */
-    lg.core.trait.Result result = 2;
+    lg.core.trait.Result result = 3;
   }
 
 
@@ -320,26 +285,20 @@ message ControlStreamEvent {
   */
   message UnregisterAgentRq {
     /*
-      The request ID, represented by an Id message from the lg.core.trait
-      package.
-    */
-    lg.core.trait.Id id = 1;
-
-    /*
       The fully-qualified virtual service name from which the agent is being
       unregistered.
     */
-    string fq_service_name = 2;
+    string fq_service_name = 1;
 
     /*
       The required agent ID.
     */
-    string agent_id = 3;
+    string agent_id = 2;
 
     /*
       The required agent instance ID.
     */
-    string agent_instance = 4;
+    string agent_instance = 3;
   }
 
 
@@ -352,17 +311,12 @@ message ControlStreamEvent {
   */
   message UnregisterAgentRs {
     /*
-      The request ID, represented by an Id message from the lg.core.trait package.
-    */
-    lg.core.trait.Id id = 1;
-
-    /*
       The Result object from the lg.core.trait package, indicating the outcome
       of the unregistration request. Possible error codes include:
       - ERROR_INVALID_ARGUMENT
       - ERROR_UNKNOWN_VIRTUAL_SERVICE
     */
-    lg.core.trait.Result result = 2;
+    lg.core.trait.Result result = 1;
   }
 
 
@@ -376,25 +330,19 @@ message ControlStreamEvent {
   */
   message ConflictEvent {
     /*
-      The request ID, represented by an Id message from the lg.core.trait
-      package, used for consistency.
-    */
-    lg.core.trait.Id id = 1;
-
-    /*
       The fully-qualified virtual service name where the conflict occurred.
     */
-    string fq_service_name = 2;
+    string fq_service_name = 1;
 
     /*
       The conflicting agent ID.
     */
-    string agent_id = 3;
+    string agent_id = 2;
 
     /*
       The conflicting agent instance ID.
     */
-    string agent_instance = 4;
+    string agent_instance = 3;
 
     /*
       A human-readable reason for the conflict. Clients should not rely on the
@@ -405,16 +353,22 @@ message ControlStreamEvent {
 
 
 
+  /*
+    The request ID, represented by an Id message from the lg.core.trait
+    package, used for consistency.
+  */
+  lg.core.trait.Id id = 1;
+
   oneof event {
-    InitRq init_rq = 1;
-    InitRs init_rs = 2;
-    RegisterVirtualServiceRq register_virtual_service_rq = 3;
-    RegisterVirtualServiceRs register_virtual_service_rs = 4;
-    RegisterAgentRq register_agent_rq = 5;
-    RegisterAgentRs register_agent_rs = 6;
-    UnregisterAgentRq unregister_agent_rq = 7;
-    UnregisterAgentRs unregister_agent_rs = 8;
-    ConflictEvent conflict_event = 9;
+    InitRq init_rq = 2;
+    InitRs init_rs = 3;
+    RegisterVirtualServiceRq register_virtual_service_rq = 4;
+    RegisterVirtualServiceRs register_virtual_service_rs = 5;
+    RegisterAgentRq register_agent_rq = 6;
+    RegisterAgentRs register_agent_rs = 7;
+    UnregisterAgentRq unregister_agent_rq = 8;
+    UnregisterAgentRs unregister_agent_rs = 9;
+    ConflictEvent conflict_event = 10;
   }
 }
 

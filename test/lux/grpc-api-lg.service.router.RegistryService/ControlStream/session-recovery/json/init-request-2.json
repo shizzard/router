@@ -1,8 +1,8 @@
 {
+  "id": {"tag": "init-2"},
   "event": {
     "init_rq": {
-      "id": {"id": "init-2"},
-      "session_id": "3aa4b4e4-f4ea-4aaf-a79c-17dbe05e5ed0",
+      "session_id": "2245b34f-405e-45af-85c4-85d06fb0fa72",
       "endpoint": {
         "host": "test.lg",
         "port": 8137
