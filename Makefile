@@ -66,8 +66,9 @@ all: $(CONFIG) $(RELEASE_BIN) $(RELEASE_BIN_CLI)
 
 ROUTER_DIR_TOOLS_LUX := $(ROUTER_DIR_TOOLS)/lux
 TOOL_LUX := $(ROUTER_DIR_TOOLS_LUX)/bin/lux
+TOOL_LUX_VERSION := $(shell cat $(ROUTER_DIR_TOOLS)/.lux_version)
 $(TOOL_LUX):
-	git clone https://github.com/hawk/lux.git $(ROUTER_DIR_TOOLS_LUX)
+	git clone --branch $(TOOL_LUX_VERSION) --depth 1 https://github.com/hawk/lux.git $(ROUTER_DIR_TOOLS_LUX)
 	@cd $(ROUTER_DIR_TOOLS_LUX) && autoconf && ./configure && make
 
 ################################################################################
@@ -149,40 +150,42 @@ common-tests:
 
 .PHONY: lux-tests
 ROUTER_DIR_TESTS_LUX := $(ROUTER_DIR_TESTS)/lux
-ifeq (,$(SCOPE))
-	TEST_CASES := $(shell $(TOOL_LUX) --mode=list_dir $(ROUTER_DIR_TESTS_LUX))
-else
-	TEST_CASES := $(shell $(TOOL_LUX) --mode=list_dir $(ROUTER_DIR_TESTS_LUX) | grep $(SCOPE))
-endif
+TEST_CASES := $(shell \
+	find $(ROUTER_DIR_TESTS_LUX) -type f -iname "*.lux" -exec dirname {} \; \
+  | grep '$(SCOPE)' | sort -u \
+)
+FAILED_CASES := $(ROUTER_DIR_TESTS_LUX)/.failed_cases
 lux-tests: $(RELEASE_TEST_BIN) $(RELEASE_TEST_BIN_CLI) $(TOOL_LUX)
-	@echo ":: LUX RUN"; \
-	FAILED_CASES=""; \
-	EXIT_STATUS=0; \
-	for dir in $(TEST_CASES); do\
-		echo -e "\n -> TEST CASE $$dir"; \
-		$(MAKE) -C $$dir build all; \
-		EXIT_CODE=$$?; \
-		if [ $$EXIT_CODE -ne 0 ]; then \
-			FAILED_CASES=$$(echo -e "$$FAILED_CASES\n$$dir (file://`realpath $$dir`/lux_logs/latest_run/lux_summary.log.html)"); \
-		fi; \
-		EXIT_STATUS=$$(expr $$EXIT_STATUS + $$EXIT_CODE); \
-	done; \
-	if [ $$EXIT_STATUS -ne 0 ]; then \
-		echo -e "\nFailed cases: $$FAILED_CASES"; \
-	fi; \
-	echo -e ":: LUX END\n"; \
-	exit $$EXIT_STATUS;
+	@echo ":: LUX TESTS"
+	rm -f $(FAILED_CASES)
+	@$(foreach TEST_CASE, $(TEST_CASES), \
+		echo " -> TEST CASE $(TEST_CASE)"; \
+		$(MAKE) -C $(TEST_CASE) build all || \
+		echo "$(TEST_CASE) (file://`realpath $(TEST_CASE)`/lux_logs/latest_run/lux_summary.log.html)" >> $(FAILED_CASES); \
+	)
+	@echo
+	@echo "$(strip $(shell echo $(TEST_CASES) | tr ' ' '\n' | wc -l)) test cases executed."
+	@if [ -e "$(FAILED_CASES)" ]; then \
+		echo "`cat $(FAILED_CASES) | wc -l | xargs` failed cases:"; \
+		cat $(FAILED_CASES); \
+		rm $(FAILED_CASES); \
+		echo ":: LUX END"; \
+		exit 1; \
+	else \
+		echo "All cases passed."; \
+		echo ":: LUX END"; \
+	fi
+
 
 .PHONY: lux-clean
-ROUTER_DIR_TESTS_LUX := $(ROUTER_DIR_TESTS)/lux
 lux-clean: $(RELEASE_TEST_BIN) $(RELEASE_TEST_BIN_CLI) $(TOOL_LUX)
-	@echo ":: LUX CLEAN"; \
-	for dir in $(TEST_CASES); do \
-		echo; \
-		echo -e "\n -> TEST CASE $$dir"; \
-		$(MAKE) -C $$dir clean; \
-	done; \
-	echo -e ":: LUX END\n";
+	@echo ":: LUX CLEAN"
+	@$(foreach TEST_CASE, $(TEST_CASES), \
+		echo " -> TEST CASE $(TEST_CASE)"; \
+		$(MAKE) -C $(TEST_CASE) clean; \
+	)
+	@echo
+	@echo ":: LUX END";
 
 ################################################################################
 # Erlang clean

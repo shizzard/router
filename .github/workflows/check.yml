@@ -27,18 +27,22 @@ jobs:
       with:
         path: _build/test
         key: ${{ runner.os }}-test-build-${{ hashFiles('rebar.lock') }}
-    - name: Cache test tools
-      id: test-tools
+    - name: Cache test tools (lux)
+      id: test-tools-lux
       uses: actions/cache@v3
       with:
-        path: _tools
-        key: ${{ runner.os }}-test-tools-${{ hashFiles('Makefile') }}
+        path: _tools/lux
+        key: ${{ runner.os }}-test-tools-lux-${{ hashFiles('_tools/.lux_version') }}
     - name: Cache test plt
       uses: actions/cache@v3
       id: test-plt
       with:
         path: .plt
         key: ${{ runner.os }}-test-plt-${{ hashFiles('rebar.lock') }}
+
+    ## dialyzer run
+    - name: Print ENV
+      run: printenv
 
     ## dialyzer run
     - name: Dialyzer
