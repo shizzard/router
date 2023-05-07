@@ -4,7 +4,7 @@
 -include_lib("router_log/include/router_log.hrl").
 -include_lib("typr/include/typr_specs_supervisor.hrl").
 
--export([start_handler/3, lookup_handler/1, start_link/0, init/1]).
+-export([start_handler/3, lookup_handler/1, recover_handler/4, start_link/0, init/1]).
 
 
 
@@ -34,6 +34,19 @@ lookup_handler(SessionId) ->
     undefined -> {error, undefined};
     Pid -> {ok, Pid}
   end.
+
+
+
+-spec recover_handler(
+  Pid :: pid(),
+  SessionId :: router_grpc_stream_h:session_id(),
+  Host :: router_grpc_service_registry:endpoint_host(),
+  Port :: router_grpc_service_registry:endpoint_port()
+) ->
+  type:ok_return(OkRet :: pid()).
+
+recover_handler(Pid, SessionId, Host, Port) ->
+  router_grpc_stream_h:recover(Pid, SessionId, Host, Port, self()).
 
 
 

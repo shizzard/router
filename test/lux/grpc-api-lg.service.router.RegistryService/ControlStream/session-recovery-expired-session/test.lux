@@ -1,5 +1,5 @@
 [doc]
-Check if router handles session reinitialization within another stream.
+Check if router fails to recover session due to session expiry.
 [enddoc]
 
 [include ${ROUTER_DIR_TESTS_LUX}/__common/capture.luxinc]

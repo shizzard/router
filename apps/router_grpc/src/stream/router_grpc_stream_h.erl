@@ -4,7 +4,7 @@
 -include_lib("router_log/include/router_log.hrl").
 -include_lib("typr/include/typr_specs_gen_server.hrl").
 
--export([lookup/1]).
+-export([lookup/1, recover/5]).
 -export([
   start_link/4, init/1,
   handle_call/3, handle_cast/2, handle_info/2,
@@ -35,6 +35,7 @@
 
 
 -define(msg_session_inactivity_trigger(Ref), {msg_session_inactivity_trigger, Ref}).
+-define(msg_recover(SessionId, Host, Port, ConnPid), {msg_recover, SessionId, Host, Port, ConnPid}).
 
 
 
@@ -50,6 +51,22 @@
   Ret :: pid() | undefined.
 
 lookup(SessionId) -> gproc:where({n, l, ?gproc_key(SessionId)}).
+
+
+
+-spec recover(
+  Pid :: pid(),
+  SessionId :: router_grpc_stream_h:session_id(),
+  Host :: router_grpc_service_registry:endpoint_host(),
+  Port :: router_grpc_service_registry:endpoint_port(),
+  ConnPid :: pid()
+) ->
+  typr:generic_return(
+    ErrorRet :: conn_alive | invalid_endpoint
+  ).
+
+recover(Pid, SessionId, Host, Port, ConnPid) ->
+  gen_server:call(Pid, ?msg_recover(SessionId, Host, Port, ConnPid)).
 
 
 
@@ -96,9 +113,7 @@ init_register(S0) ->
   case lookup(S0#state.session_id) of
     undefined ->
       true = gproc:reg({n, l, ?gproc_key(S0#state.session_id)}),
-      {ok, S0#state{
-        conn_monitor_ref = erlang:monitor(process, S0#state.conn_pid)
-      }};
+      {ok, init_conn_monitor(S0)};
     Pid ->
       {error, {already_started, S0#state.session_id, Pid}}
   end.
@@ -108,6 +123,26 @@ init_register(S0) ->
 %% Handlers
 
 
+
+%% ConnPid dead, session id and endpoint params are correct: successful recover
+handle_call(?msg_recover(SessionId, Host, Port, ConnPid), _GenReplyTo, #state{
+  session_id = SessionId, host = Host, port = Port,
+  conn_pid = undefined, conn_monitor_ref = undefined
+} = S0) ->
+  {reply, ok, init_conn_monitor(S0#state{conn_pid = ConnPid})};
+
+%% ConnPid alive, refuse the recovery
+handle_call(?msg_recover(SessionId, Host, Port, _ConnPid), _GenReplyTo, #state{
+  session_id = SessionId, host = Host, port = Port
+} = S0) ->
+  {reply, {error, conn_alive}, S0};
+
+%% Endpoint params are incorrect, refuse the recovery
+handle_call(?msg_recover(_SessionId, Host, Port, _ConnPid), _GenReplyTo, #state{
+  host = Host_, port = Port_
+} = S0)
+when Host_ /= Host; Port_ /= Port ->
+  {reply, {error, invalid_endpoint}, S0};
 
 handle_call(Unexpected, _GenReplyTo, S0) ->
   ?l_error(#{text => "Unexpected call", what => handle_call, details => Unexpected}),
@@ -172,6 +207,12 @@ init_session_timer(#state{
 } = S0) ->
   _ = erlang:cancel_timer(OldTref),
   init_session_timer(S0#state{session_ref = undefined, session_timer_ref = undefined}).
+
+
+
+init_conn_monitor(S0) ->
+  S0#state{conn_monitor_ref = erlang:monitor(process, S0#state.conn_pid)}.
+
 
 
 init_prometheus_metrics() ->

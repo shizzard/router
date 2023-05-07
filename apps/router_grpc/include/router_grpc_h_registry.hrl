@@ -13,6 +13,7 @@
 -define(trailer_control_stream_reinit, <<"re_init">>).
 -define(trailer_control_stream_noinit, <<"no_init">>).
 -define(trailer_control_stream_session_expired, <<"session_expired">>).
+-define(trailer_control_stream_session_recovery_failed, <<"session_recovery_failed">>).
 
 -define(trailer_package_empty_message(_Package), <<"Virtual service package cannot be empty">>).
 -define(trailer_package_restricted_message(Package), <<"Virtual service package is restricted: ", Package/binary>>).
@@ -29,3 +30,7 @@
 -define(trailer_control_stream_reinit_message(_), <<"InitRq was already handled within the control stream">>).
 -define(trailer_control_stream_noinit_message(_), <<"InitRq must be handled within the control stream first">>).
 -define(trailer_control_stream_session_expired_message(_), <<"Session identified by provided id already expired">>).
+-define(trailer_control_stream_session_recovery_failed_message(Reason), case Reason of
+  conn_alive -> <<"Session recovery failed: original connection is still alive">>;
+  invalid_endpoint -> <<"Session recovery failed: endpoint parameters do not match original ones">>
+end).

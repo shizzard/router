@@ -1,0 +1,11 @@
+{
+  "id": {"tag": "init-1"},
+  "event": {
+    "init_rq": {
+      "endpoint": {
+        "host": "test.lg",
+        "port": 8137
+      }
+    }
+  }
+}

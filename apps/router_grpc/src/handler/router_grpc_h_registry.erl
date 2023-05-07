@@ -175,11 +175,11 @@ control_stream(#'lg.service.router.ControlStreamEvent'{
 %% Initial InitRq request: session id is undefined, handler pid is undefined
 control_stream(#'lg.service.router.ControlStreamEvent'{
   id = IdRecord,
-  event = {init_rq, #'lg.service.router.ControlStreamEvent.InitRq'{}}
-} = Pdu, #state{session_id = undefined, handler_pid = undefined} = S0) ->
-  case control_stream_handle(Pdu, S0) of
-    {ok, {RetPdu, S1}} ->
-      {ok, {reply, RetPdu#'lg.service.router.ControlStreamEvent'{id = IdRecord}}, S1};
+  event = {init_rq, #'lg.service.router.ControlStreamEvent.InitRq'{}} = Event
+} = _Pdu, #state{session_id = undefined, handler_pid = undefined} = S0) ->
+  case control_stream_event_handle(Event, S0) of
+    {ok, {RetEvent, S1}} ->
+      {ok, {reply, #'lg.service.router.ControlStreamEvent'{id = IdRecord, event = RetEvent}}, S1};
     {error, {Trailers, S1}} ->
       {error, {grpc_error, ?grpc_code_invalid_argument, ?grpc_message_invalid_argument_payload, Trailers}, S1}
   end;
@@ -198,13 +198,14 @@ control_stream(#'lg.service.router.ControlStreamEvent'{
     ?trailer_control_stream_reinit => ?trailer_control_stream_reinit_message(undefined)
   }}, S0};
 
-%% All other events are handled within control_stream_handle/2
+%% All other events are handled within control_stream_event_handle/2
 control_stream(#'lg.service.router.ControlStreamEvent'{
-  id = IdRecord
-} = Pdu, S0) ->
-  case control_stream_handle(Pdu, S0) of
-    {ok, {RetPdu, S1}} ->
-      {ok, {reply, RetPdu#'lg.service.router.ControlStreamEvent'{id = IdRecord}}, S1#state{}};
+  id = IdRecord,
+  event = Event
+} = _Pdu, S0) ->
+  case control_stream_event_handle(Event, S0) of
+    {ok, {RetEvent, S1}} ->
+      {ok, {reply, #'lg.service.router.ControlStreamEvent'{id = IdRecord, event = RetEvent}}, S1#state{}};
     {error, {Trailers, S1}} ->
       {error, {grpc_error, ?grpc_code_invalid_argument, ?grpc_message_invalid_argument_payload, Trailers}, S1}
   end.
@@ -452,12 +453,12 @@ list_virtual_services_list_map(#router_grpc_service_registry_definition_external
 
 
 
-control_stream_handle(#'lg.service.router.ControlStreamEvent'{
-  event = {init_rq, #'lg.service.router.ControlStreamEvent.InitRq'{
+control_stream_event_handle({init_rq, #'lg.service.router.ControlStreamEvent.InitRq'{
     session_id = <<>>,
     endpoint = #'lg.core.network.Endpoint'{host = Host0, port = Port0}
-  }}
-}, #state{session_id = undefined, handler_pid = undefined} = S0) ->
+  }},
+  #state{session_id = undefined, handler_pid = undefined} = S0
+) ->
   {HostErrors, Host} = validate_host(Host0),
   {PortErrors, Port} = validate_port(Port0),
   ErrorList = lists:flatten([HostErrors, PortErrors]),
@@ -465,42 +466,40 @@ control_stream_handle(#'lg.service.router.ControlStreamEvent'{
     [] ->
       SessionId = list_to_binary(uuid:uuid_to_string(uuid:get_v4_urandom())),
       {ok, HPid} = router_grpc_stream_sup:start_handler(SessionId, Host, Port),
-      {ok, {#'lg.service.router.ControlStreamEvent'{
-        event = {init_rs, #'lg.service.router.ControlStreamEvent.InitRs'{
+      {ok, {
+        {init_rs, #'lg.service.router.ControlStreamEvent.InitRs'{
           session_id = SessionId, result = #'lg.core.trait.Result'{status = 'SUCCESS'}
-        }}
-      }, S0#state{session_id = SessionId, handler_pid = HPid}}};
+        }},
+        S0#state{session_id = SessionId, handler_pid = HPid}
+      }};
     Trailers -> {error, {Trailers, S0}}
   end;
 
-control_stream_handle(#'lg.service.router.ControlStreamEvent'{
-  event = {init_rq, #'lg.service.router.ControlStreamEvent.InitRq'{
-    session_id = SessionId0
-  }}
-}, #state{session_id = undefined, handler_pid = undefined} = S0) ->
+control_stream_event_handle({init_rq, #'lg.service.router.ControlStreamEvent.InitRq'{
+    session_id = SessionId0,
+    endpoint = #'lg.core.network.Endpoint'{host = Host0, port = Port0}
+  }},
+  #state{session_id = undefined, handler_pid = undefined} = S0
+) ->
   {SessionErrors, SessionId} = validate_session_id(SessionId0),
-  ErrorList = lists:flatten([SessionErrors]),
+  {HostErrors, Host} = validate_host(Host0),
+  {PortErrors, Port} = validate_port(Port0),
+  ErrorList = lists:flatten([SessionErrors, HostErrors, PortErrors]),
   case ErrorList of
     [] ->
       case router_grpc_stream_sup:lookup_handler(SessionId) of
         {ok, HPid} ->
-          {ok, {#'lg.service.router.ControlStreamEvent'{
-            event = {init_rs, #'lg.service.router.ControlStreamEvent.InitRs'{
-              session_id = SessionId, result = #'lg.core.trait.Result'{status = 'SUCCESS'}
-            }}
-          }, S0#state{session_id = SessionId, handler_pid = HPid}}};
+          control_stream_event_handle_session_recovery(HPid, SessionId, Host, Port, S0);
         {error, undefined} ->
           {error, {
             #{?trailer_control_stream_session_expired => ?trailer_control_stream_session_expired_message(undefined)},
             S0
           }}
-      end
-    %% Cannot get Trailers here because session id validator always succeeds
-    % Trailers -> {error, {Trailers, S0}}
+      end;
+    Trailers -> {error, {Trailers, S0}}
   end;
 
-control_stream_handle(#'lg.service.router.ControlStreamEvent'{
-  event = {register_virtual_service_rq, #'lg.service.router.ControlStreamEvent.RegisterVirtualServiceRq'{
+control_stream_event_handle({register_virtual_service_rq, #'lg.service.router.ControlStreamEvent.RegisterVirtualServiceRq'{
     virtual_service = #'lg.core.grpc.VirtualService'{
       service = {stateless, #'lg.core.grpc.VirtualService.StatelessVirtualService'{
         package = Package0,
@@ -510,8 +509,9 @@ control_stream_handle(#'lg.service.router.ControlStreamEvent'{
       maintenance_mode_enabled = MaintenanceMode0,
       endpoint = #'lg.core.network.Endpoint'{host = Host0, port = Port0}
     }
-  }}
-}, S0) ->
+  }},
+  S0
+) ->
   {PackageErrors, Package} = validate_package(Package0),
   {NameErrors, Name} = validate_name(Name0),
   {MethodsErrors, Methods} = validate_methods(Methods0),
@@ -524,16 +524,16 @@ control_stream_handle(#'lg.service.router.ControlStreamEvent'{
   case ErrorList of
     [] ->
       ok = router_grpc_service_registry:register(stateless, Package, Name, Methods, MaintenanceMode, Host, Port),
-      {ok, {#'lg.service.router.ControlStreamEvent'{
-        event = {register_virtual_service_rs, #'lg.service.router.ControlStreamEvent.RegisterVirtualServiceRs'{
+      {ok, {
+        {register_virtual_service_rs, #'lg.service.router.ControlStreamEvent.RegisterVirtualServiceRs'{
           result = #'lg.core.trait.Result'{status = 'SUCCESS'}
-        }}
-      }, S0}};
+        }},
+        S0
+      }};
     Trailers -> {error, {Trailers, S0}}
   end;
 
-control_stream_handle(#'lg.service.router.ControlStreamEvent'{
-  event = {register_virtual_service_rq, #'lg.service.router.ControlStreamEvent.RegisterVirtualServiceRq'{
+control_stream_event_handle({register_virtual_service_rq, #'lg.service.router.ControlStreamEvent.RegisterVirtualServiceRq'{
     virtual_service = #'lg.core.grpc.VirtualService'{
       service = {stateful, #'lg.core.grpc.VirtualService.StatefulVirtualService'{
         package = Package0,
@@ -544,8 +544,9 @@ control_stream_handle(#'lg.service.router.ControlStreamEvent'{
       maintenance_mode_enabled = MaintenanceMode0,
       endpoint = #'lg.core.network.Endpoint'{host = Host0, port = Port0}
     }
-  }}
-}, S0) ->
+  }},
+  S0
+) ->
   {PackageErrors, Package} = validate_package(Package0),
   {NameErrors, Name} = validate_name(Name0),
   {MethodsErrors, Methods} = validate_methods(Methods0),
@@ -559,12 +560,31 @@ control_stream_handle(#'lg.service.router.ControlStreamEvent'{
   case ErrorList of
     [] ->
       ok = router_grpc_service_registry:register(stateful, Package, Name, Methods, Cmp, MaintenanceMode, Host, Port),
-      {ok, {#'lg.service.router.ControlStreamEvent'{
-        event = {register_virtual_service_rs, #'lg.service.router.ControlStreamEvent.RegisterVirtualServiceRs'{
+      {ok, {
+        {register_virtual_service_rs, #'lg.service.router.ControlStreamEvent.RegisterVirtualServiceRs'{
           result = #'lg.core.trait.Result'{status = 'SUCCESS'}
-        }}
-      }, S0}};
+        }},
+        S0
+      }};
     Trailers -> {error, Trailers}
+  end.
+
+
+
+control_stream_event_handle_session_recovery(HPid, SessionId, Host, Port, S0) ->
+  case router_grpc_stream_sup:recover_handler(HPid, SessionId, Host, Port) of
+    ok ->
+      {ok, {
+        {init_rs, #'lg.service.router.ControlStreamEvent.InitRs'{
+          session_id = SessionId, result = #'lg.core.trait.Result'{status = 'SUCCESS'}
+        }},
+        S0#state{session_id = SessionId, handler_pid = HPid}
+      }};
+    {error, Reason} ->
+      {error, {
+        #{?trailer_control_stream_session_recovery_failed => ?trailer_control_stream_session_recovery_failed_message(Reason)},
+        S0
+      }}
   end.
 
 

@@ -79,7 +79,7 @@ version:
 	@echo $(shell git describe --tags)
 
 ################################################################################
-# Erlang build
+# Build
 
 REBAR := $(abspath ./)/rebar3
 
@@ -111,7 +111,7 @@ dockerize:
 	$(DOCKER) build --tag 'router:$(shell git describe --tags)' $(ROUTER_DIR_ROOT)
 
 ################################################################################
-# Erlang run
+# Run
 
 .PHONY: shell
 shell: compile
@@ -123,7 +123,7 @@ run: $(RELEASE_BIN)
 	$(RELEASE_BIN) console
 
 ################################################################################
-# Erlang test
+# Test
 
 .PHONY: check
 check: dialyze unit-tests common-tests lux-tests
@@ -142,10 +142,11 @@ unit-tests:
 
 .PHONY: common-tests
 ROUTER_DIR_TESTS_CT := $(ROUTER_DIR_TESTS)/ct
+ROUTER_DIR_TESTS_CT_LOGS := $(ROUTER_DIR_TESTS_CT)/_logs
 common-tests:
 	@echo ":: CT RUN"
 	$(call print_app_env)
-	$(REBAR) as test ct -v -c --verbosity 100 --logdir $(ROUTER_DIR_TESTS_CT)/_logs
+	$(REBAR) as test ct -v -c --verbosity 100 --logdir $(ROUTER_DIR_TESTS_CT_LOGS)
 	@echo ":: CT END"
 
 .PHONY: lux-tests
@@ -159,11 +160,12 @@ lux-tests: $(RELEASE_TEST_BIN) $(RELEASE_TEST_BIN_CLI) $(TOOL_LUX)
 	@echo ":: LUX TESTS"
 	rm -f $(FAILED_CASES)
 	@$(foreach TEST_CASE, $(TEST_CASES), \
-		echo " -> TEST CASE $(TEST_CASE)"; \
+		echo; echo; \
+		echo "     -> TEST CASE $(TEST_CASE)"; \
 		$(MAKE) -C $(TEST_CASE) build all || \
 		echo "$(TEST_CASE) (file://`realpath $(TEST_CASE)`/lux_logs/latest_run/lux_summary.log.html)" >> $(FAILED_CASES); \
 	)
-	@echo
+	@echo; echo
 	@echo "$(strip $(shell echo $(TEST_CASES) | tr ' ' '\n' | wc -l)) test cases executed."
 	@if [ -e "$(FAILED_CASES)" ]; then \
 		echo "`cat $(FAILED_CASES) | wc -l | xargs` failed cases:"; \
@@ -172,26 +174,30 @@ lux-tests: $(RELEASE_TEST_BIN) $(RELEASE_TEST_BIN_CLI) $(TOOL_LUX)
 		echo ":: LUX END"; \
 		exit 1; \
 	else \
-		echo "All cases passed."; \
+		echo "All test cases passed."; \
 		echo ":: LUX END"; \
 	fi
 
+################################################################################
+# Clean
+
+.PHONY: common-clean
+common-clean:
+	rm -rf $(ROUTER_DIR_TESTS_CT_LOGS)
 
 .PHONY: lux-clean
 lux-clean: $(RELEASE_TEST_BIN) $(RELEASE_TEST_BIN_CLI) $(TOOL_LUX)
 	@echo ":: LUX CLEAN"
 	@$(foreach TEST_CASE, $(TEST_CASES), \
-		echo " -> TEST CASE $(TEST_CASE)"; \
+		echo; echo; \
+		echo "     -> TEST CASE $(TEST_CASE)"; \
 		$(MAKE) -C $(TEST_CASE) clean; \
 	)
 	@echo
 	@echo ":: LUX END";
 
-################################################################################
-# Erlang clean
-
 .PHONY: clean
-clean: lux-clean
+clean: common-clean lux-clean
 	$(REBAR) clean -a
 
 .PHONY: dist-clean
