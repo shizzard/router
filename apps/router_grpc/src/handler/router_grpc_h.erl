@@ -91,8 +91,8 @@ init(StreamId, #{
   headers := #{?http2_header_content_type := <<"application/grpc", _Rest/binary>>}
 } = Req, _Opts) ->
   router_log:component(router_grpc),
-  case router_grpc_service_registry:lookup(Path) of
-    {ok, #router_grpc_service_registry_definition_internal{module = Module} = Details} ->
+  case router_grpc_service_registry:lookup_fqmn(Path) of
+    {ok, [#router_grpc_service_registry_definition_internal{module = Module} = Details]} ->
       ?l_debug(#{text => "Internal gRPC request", what => init, details => #{
         service => Details#router_grpc_service_registry_definition_internal.service,
         method => Details#router_grpc_service_registry_definition_internal.method

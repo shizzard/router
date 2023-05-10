@@ -65,15 +65,18 @@ init([]) ->
   typr:ok_return().
 
 start_cowboy(Port) ->
-  {ok, _} = cowboy:start_clear(router_grpc_listener,
+  case cowboy:start_clear(router_grpc_listener,
     [{port, Port}],
     #{
       env => #{dispatch => cowboy_router:compile([])},
       stream_handlers => [router_grpc_h],
       protocols => [http2]
     }
-  ),
-  ok.
+  ) of
+    {ok, _} -> ok;
+    {error, {already_started, _}} -> ok;
+    {error, _Reason} = Ret -> Ret
+  end.
 
 
 

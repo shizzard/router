@@ -186,7 +186,7 @@ common-clean:
 	rm -rf $(ROUTER_DIR_TESTS_CT_LOGS)
 
 .PHONY: lux-clean
-lux-clean: $(RELEASE_TEST_BIN) $(RELEASE_TEST_BIN_CLI) $(TOOL_LUX)
+lux-clean:
 	@echo ":: LUX CLEAN"
 	@$(foreach TEST_CASE, $(TEST_CASES), \
 		echo; echo; \

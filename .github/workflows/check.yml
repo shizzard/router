@@ -55,6 +55,13 @@ jobs:
     ## common tests
     - name: Common Test
       run: make common-tests
+    - name: Upload Common Test Artifacts
+      if: failure()
+      uses: actions/upload-artifact@v3
+      with:
+        name: common-tests-artifacts-${{ github.sha }}
+        path: test/ct
+        retention-days: 3
 
     ## lux tests
     - name: Install jq

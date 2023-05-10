@@ -9,7 +9,9 @@
 -include_lib("typr/include/typr_specs_gen_server.hrl").
 
 -export([
-  restricted_packages/0, register/7, register/8, unregister/5, lookup/1, lookup_internal/1, lookup_external/1,
+  restricted_packages/0, register/7, register/8, unregister/5,
+  lookup_fqmn/1, lookup_fqmn_internal/1, lookup_fqmn_external/1,
+  lookup_fqsn/4,
   get_list/1, get_list/2, get_list/3, is_maintenance/3, set_maintenance/4
 ]).
 -export([start_link/2, init/1, handle_call/3, handle_cast/2, handle_info/2, terminate/2, code_change/3]).
@@ -34,19 +36,19 @@
 -type table_registry_key() :: ?table_registry_key(
   Type :: service_type(), ServiceName :: service_name(), Host :: endpoint_host(), Port :: endpoint_port()
 ).
--type table_lookup_key() :: ?table_lookup_key(Path :: service_path()).
+-type table_lookup_key() :: ?table_lookup_key(Path :: fq_method_name()).
 -type service_type() :: stateless | stateful.
 -type service_package() :: binary().
 -type service_name() :: binary().
 -type fq_service_name() :: binary().
--type service_path() :: binary().
+-type fq_method_name() :: binary().
 -type method_name() :: binary().
 -type service_maintenance() :: boolean().
 -type endpoint_host() :: binary().
 -type endpoint_port() :: 0..65535.
 -export_type([
   table_registry_key/0, table_lookup_key/0, service_type/0, service_package/0, service_name/0,
-  fq_service_name/0, service_path/0, method_name/0, service_maintenance/0, endpoint_host/0, endpoint_port/0
+  fq_service_name/0, fq_method_name/0, method_name/0, service_maintenance/0, endpoint_host/0, endpoint_port/0
 ]).
 
 -type definition() :: definition_internal() | definition_external().
@@ -142,44 +144,63 @@ unregister(Type, Package, ServiceName, Host, Port) ->
 
 
 
--spec lookup(Path :: binary()) ->
+-spec lookup_fqmn(Fqmn :: fq_method_name()) ->
   typr:generic_return(
-    OkRet :: definition(),
+    OkRet :: [definition(), ...],
     ErrorRet :: undefined
   ).
 
-lookup(Path) ->
-  case lookup_internal(Path) of
-    {error, undefined} -> lookup_external(Path);
+lookup_fqmn(Fqmn) ->
+  case lookup_fqmn_internal(Fqmn) of
+    {error, undefined} -> lookup_fqmn_external(Fqmn);
     OkRet -> OkRet
   end.
 
 
 
--spec lookup_internal(Path :: binary()) ->
+-spec lookup_fqmn_internal(Fqmn :: fq_method_name()) ->
   typr:generic_return(
-    OkRet :: definition_internal(),
+    OkRet :: [definition_internal(), ...],
     ErrorRet :: undefined
   ).
 
-lookup_internal(Path) ->
-  case persistent_term:get(?persistent_term_key_internal(Path), undefined) of
+lookup_fqmn_internal(Fqmn) ->
+  case persistent_term:get(?persistent_term_key_internal(Fqmn), undefined) of
     undefined -> {error, undefined};
-    Definition -> {ok, Definition}
+    Definition -> {ok, [Definition]}
   end.
 
 
 
--spec lookup_external(Path :: binary()) ->
+-spec lookup_fqmn_external(Fqmn :: fq_method_name()) ->
   typr:generic_return(
-    OkRet :: definition_external(),
+    OkRet :: [definition_external(), ...],
     ErrorRet :: undefined
   ).
 
-lookup_external(Path) ->
-  case ets:lookup(?table_lookup, ?table_lookup_key(Path)) of
+lookup_fqmn_external(Fqmn) ->
+  case ets:lookup(?table_lookup, ?table_lookup_key(Fqmn)) of
     [] -> {error, undefined};
-    [Definition] -> {ok, Definition}
+    Definitions -> {ok, Definitions}
+  end.
+
+
+
+-spec lookup_fqsn(
+  Package :: service_type(),
+  ServiceName :: fq_service_name(),
+  Host :: endpoint_host(),
+  Port :: endpoint_port()
+) ->
+  typr:generic_return(
+    OkRet :: [definition_external()],
+    ErrorRet :: undefined
+  ).
+
+lookup_fqsn(Type, FqServiceName, Host, Port) ->
+  case ets:lookup(?table_registry, ?table_registry_key(Type, FqServiceName, Host, Port)) of
+    [] -> {error, undefined};
+    Definitions -> {ok, Definitions}
   end.
 
 
@@ -222,7 +243,7 @@ get_list(Filters, PageSize) when is_map(Filters) ->
   ).
 
 get_list(Filters, PageToken, PageSize) ->
-  MatchSpecFun = match_spec_fun(
+  MatchSpecFun = get_list_match_spec_fun(
     maps:get(filter_fq_service_name, Filters, undefined),
     maps:get(filter_endpoint, Filters, {undefined, undefined})
   ),
@@ -295,49 +316,51 @@ init({ServiceDefinitions, ServiceMap}) ->
 
 handle_call(?call_register_stateless(Type, Package, ServiceName, Methods, Maintenance, Host, Port), _GenReplyTo, S0) ->
   FqServiceName = <<Package/binary, ".", ServiceName/binary>>,
-  lists:foreach(fun(MethodName) ->
-    Path = <<"/", FqServiceName/binary, "/", MethodName/binary>>,
-    LookupId = ?table_lookup_key(Path),
-    Definition = #router_grpc_service_registry_definition_external{
-      id = LookupId, type = Type, package = Package, service = ServiceName,
-      fq_service = FqServiceName, methods = Methods, host = Host, port = Port
-    },
-    ets:insert(S0#state.table_lookup, Definition)
-  end, Methods),
   RegistryId = ?table_registry_key(Type, FqServiceName, Host, Port),
   RegistryDefinition = #router_grpc_service_registry_definition_external{
     id = RegistryId, type = Type, package = Package, service = ServiceName,
     fq_service = FqServiceName, methods = Methods, host = Host, port = Port
   },
-  ets:insert(S0#state.table_registry, RegistryDefinition),
-  case Maintenance of
-    true -> set_maintenance(ServiceName, Host, Port, Maintenance);
-    false -> ok
-  end,
-  {reply, ok, S0};
+  case ets:insert_new(S0#state.table_registry, RegistryDefinition) of
+    true ->
+      lists:foreach(fun(MethodName) ->
+        Fqmn = <<"/", FqServiceName/binary, "/", MethodName/binary>>,
+        LookupId = ?table_lookup_key(Fqmn),
+        LookupDefinition = RegistryDefinition#router_grpc_service_registry_definition_external{id = LookupId},
+        ets:insert(S0#state.table_lookup, LookupDefinition)
+      end, Methods),
+      case Maintenance of
+        true -> set_maintenance(ServiceName, Host, Port, Maintenance);
+        false -> ok
+      end,
+      {reply, ok, S0};
+    false ->
+      {reply, ok, S0}
+  end;
 
 handle_call(?call_register_stateful(Type, Package, ServiceName, Methods, Cmp, Maintenance, Host, Port), _GenReplyTo, S0) ->
   FqServiceName = <<Package/binary, ".", ServiceName/binary>>,
-  lists:foreach(fun(MethodName) ->
-    Path = <<"/", FqServiceName/binary, "/", MethodName/binary>>,
-    LookupId = ?table_lookup_key(Path),
-    Definition = #router_grpc_service_registry_definition_external{
-      id = LookupId, type = Type, package = Package, service = ServiceName,
-      fq_service = FqServiceName, methods = Methods, cmp = Cmp, host = Host, port = Port
-    },
-    ets:insert(S0#state.table_lookup, Definition)
-  end, Methods),
   RegistryId = ?table_registry_key(Type, FqServiceName, Host, Port),
   RegistryDefinition = #router_grpc_service_registry_definition_external{
     id = RegistryId, type = Type, package = Package, service = ServiceName,
     fq_service = FqServiceName, methods = Methods, cmp = Cmp, host = Host, port = Port
   },
-  ets:insert(S0#state.table_registry, RegistryDefinition),
-  case Maintenance of
-    true -> set_maintenance(ServiceName, Host, Port, Maintenance);
-    false -> ok
-  end,
-  {reply, ok, S0};
+  case ets:insert_new(S0#state.table_registry, RegistryDefinition) of
+    true ->
+      lists:foreach(fun(MethodName) ->
+        Fqmn = <<"/", FqServiceName/binary, "/", MethodName/binary>>,
+        LookupId = ?table_lookup_key(Fqmn),
+        LookupDefinition = RegistryDefinition#router_grpc_service_registry_definition_external{id = LookupId},
+        ets:insert(S0#state.table_lookup, LookupDefinition)
+      end, Methods),
+      case Maintenance of
+        true -> set_maintenance(ServiceName, Host, Port, Maintenance);
+        false -> ok
+      end,
+      {reply, ok, S0};
+    false ->
+      {reply, ok, S0}
+  end;
 
 handle_call(?call_unregister(Type, Package, ServiceName, Host, Port), _GenReplyTo, S0) ->
   handle_call_unregister(Type, Package, ServiceName, Host, Port, S0);
@@ -376,7 +399,7 @@ code_change(_OldVsn, S0, _Extra) ->
 
 %% This function causes dialyzer error regarding record construction:
 %% > Record construction
-%% > #router_grpc_service_registry_definition_external{id::{'_'},type::'_',package::'_',fq_service::'_',methods::'_'}
+%% > #router_grpc_service_registry_definition_external{... :: '_'}
 %% > violates the declared type of ...
 -dialyzer({nowarn_function, [handle_call_unregister/6]}).
 handle_call_unregister(Type, Package, ServiceName, Host, Port, S0) ->
@@ -478,45 +501,74 @@ atom_snake_case(Name) ->
 
 
 
-%% e.g.
-%% ets:fun2ms(
-%%   fun(#router_grpc_service_registry_definition_external{id = Id, _ = '_'} = Obj)
-%%   when Id >= Key ->
-%%     Obj
-%%   end
-%% ).
-match_spec_fun(undefined, {undefined, undefined}) ->
+%% This function causes dialyzer error regarding record construction:
+%% > Record construction
+%% > #router_grpc_service_registry_definition_external{... :: '_'}
+%% > violates the declared type of ...
+-dialyzer({nowarn_function, [get_list_match_spec_fun/2]}).
+
+% ets:fun2ms(
+%   fun(#router_grpc_service_registry_definition_external{id = Id, _ = '_'} = Obj)
+%   when Id >= Key ->
+%     Obj
+%   end
+% )
+get_list_match_spec_fun(undefined, {undefined, undefined}) ->
   fun(Key) ->
-    [{{'_','$1','_','_','_','_','_','_','_','_'}, [
-      {'>=','$1', {const,Key}}
-    ], ['$_']}]
+    [{
+      #router_grpc_service_registry_definition_external{id = '$1', _ = '_'},
+      [{'>=', '$1', {const,Key}}],
+      ['$_']
+    }]
   end;
 
-match_spec_fun(FqFilter, {undefined, undefined}) ->
+% ets:fun2ms(
+%   fun(#router_grpc_service_registry_definition_external{
+%     id = Id, fq_service = Fqsn, _ = '_'
+%   } = Obj)
+%   when Id >= Key, Fqsn == FqFilter ->
+%     Obj
+%   end
+% )
+get_list_match_spec_fun(FqFilter, {undefined, undefined}) ->
   fun(Key) ->
-    [{{'_','$1','_','_','_','$2','_','_','_','_'}, [
-      {'>=','$1', {const,Key}},
-      {'==','$2', {const,FqFilter}}
-    ], ['$_']}]
+    [{#router_grpc_service_registry_definition_external{id = '$1', fq_service = '$2', _ = '_'},
+      [{'>=', '$1', {const,Key}}, {'==', '$2', {const,FqFilter}}],
+      ['$_']
+    }]
   end;
 
-match_spec_fun(undefined, {Host, Port}) ->
+% ets:fun2ms(
+%   fun(#router_grpc_service_registry_definition_external{
+%     id = Id, host = Host_, port = Port_, _ = '_'
+%   } = Obj)
+%   when Id >= Key, Host == Host_, Port == Port_ ->
+%     Obj
+%   end
+% )
+get_list_match_spec_fun(undefined, {Host, Port}) ->
   fun(Key) ->
-    [{{'_','$1','_','_','_','_','_','_','$2','$3'}, [
-      {'>=','$1', {const,Key}},
-      {'==','$2', {const,Host}},
-      {'==','$3', {const,Port}}
-    ], ['$_']}]
+    [{#router_grpc_service_registry_definition_external{id = '$1', host = '$2', port = '$3', _ = '_'},
+      [{'>=', '$1', {const,Key}}, {'==', {const,Host}, '$2'}, {'==', {const,Port}, '$3'}],
+      ['$_']
+    }]
   end;
 
-match_spec_fun(FqFilter, {Host, Port}) ->
+% ets:fun2ms(
+%   fun(#router_grpc_service_registry_definition_external{
+%     id = Id, fq_service = Fqsn, host = Host_, port = Port_, _ = '_'
+%   } = Obj)
+%   when Id >= Key, Fqsn == FqFilter, Host == Host_, Port == Port_ ->
+%     Obj
+%   end
+% )
+get_list_match_spec_fun(FqFilter, {Host, Port}) ->
   fun(Key) ->
-    [{{'_','$1','_','_','_','$2','_','_','$3','$4'}, [
-      {'>=','$1', {const,Key}},
-      {'==','$2', {const,FqFilter}},
-      {'==','$3', {const,Host}},
-      {'==','$4', {const,Port}}
-    ], ['$_']}]
+    [{#router_grpc_service_registry_definition_external{
+      id = '$1', fq_service = '$2', host = '$3', port = '$4', _ = '_'},
+      [{'>=', '$1', {const,Key}}, {'==', '$2', {const,FqFilter}}, {'==', {const,Host}, '$3'}, {'==', {const,Port}, '$4'}],
+      ['$_']
+    }]
   end.
 
 
