@@ -1,5 +1,5 @@
 [doc]
-Check if router registers virtual service via control stream.
+Check if router fails to reinit the stream.
 [enddoc]
 
 [include ${ROUTER_DIR_TESTS_LUX}/__common/capture.luxinc]
@@ -9,8 +9,6 @@ Check if router registers virtual service via control stream.
 [include ${ROUTER_DIR_TESTS_LUX}/__router/registry-service.luxinc]
 
 [global request-file-init=json/init-request.json]
-[global request-file-register=json/register-request.json]
-[global request-file-list=json/list-request.json]
 
 [shell router]
   [invoke app-start]
@@ -43,30 +41,17 @@ Check if router registers virtual service via control stream.
   [progress (session id ${session-id})]
 
 [shell control-stream]
-  [progress (register)]
-  [invoke grpcc-send-data ${request-file-register}]
+  [progress (reinit resume_rq)]
+  [invoke grpcc-send-data ${request-file-init}]
   [invoke grpcc-prompt]
-  [invoke grpcc-recv-data]
-  [global data=${out}]
+  [invoke grpcc-recv-trailers]
+  [global trailers=${out}]
+  [invoke grpcc-check-ok]
 
 [shell jq-check]
   [progress (check response)]
-  [invoke jq-check-file-match ${data} .id.tag "register-1"]
-  [invoke jq-check-file-match ${data} .event.register_virtual_service_rs.result.status SUCCESS]
-
-[shell list]
-  [progress (list)]
-  [invoke grpcc-start-unary ${grpc-service-name} ${grpc-method-list-virtual-services} "json" "" ${request-file-list}]
-  [progress (check response)]
-  [invoke jq-check-file-match ${headers} .headers.\"content-type\" "application/grpc+proto"]
-  [invoke jq-check-file-match ${headers} .headers.\"grpc-user-agent\" "router/"]
-  [invoke jq-check-file-match ${headers} .status 200]
-  [invoke jq-check-file-match ${data} .services[0].service.stateless.package lg.test.package]
-  [invoke jq-check-file-match ${data} .services[0].service.stateless.name StatelessService]
-  [invoke jq-check-file-match ${data} .services[0].service.stateless.methods[0].name MethodOne]
-  [invoke jq-check-file-match ${data} .services[0].endpoint.host "test.lg"]
-  [invoke jq-check-file-match ${data} .services[0].endpoint.port 8137]
-  [invoke jq-check-file-match ${trailers} .trailers.\"grpc-status\" 0]
-  [invoke jq-check-file-empty ${trailers} .trailers.\"grpc-message\"]
+  [invoke jq-check-file-match ${trailers} .trailers.\"grpc-status\" 3]
+  [invoke jq-check-file-match ${trailers} .trailers.\"grpc-message\" "Invalid payload"]
+  [invoke jq-check-file-match ${trailers} .trailers.\"re_init\" "InitRq was already handled within the control stream"]
 
 [cleanup]

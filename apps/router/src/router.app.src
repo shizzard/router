@@ -3,6 +3,6 @@
   {vsn, "0.1.0"},
   {registered, []},
   {mod, {'router_app', []}},
-  {applications, [kernel, stdlib, router_log]},
+  {applications, [kernel, stdlib, gproc, router_log]},
   {env,[]}
 ]}.

@@ -161,9 +161,16 @@ g_happy_path_bistream_request(Config) ->
   Payload1 = registry_definitions:encode_msg(#'lg.service.router.ControlStreamEvent'{
     id = #'lg.core.trait.Id'{tag = <<"id-1">>},
     event = {init_rq, #'lg.service.router.ControlStreamEvent.InitRq'{
-      endpoint = #'lg.core.network.Endpoint'{
-        host = "lo",
-        port = 1000
+      virtual_service = #'lg.core.grpc.VirtualService'{
+        service = {stateless, #'lg.core.grpc.VirtualService.StatelessVirtualService'{
+          package = <<"foo.bar">>,
+          name = <<"BazService">>,
+          methods = [#'lg.core.grpc.VirtualService.Method'{name = <<"DoSomething">>}]
+        }},
+        endpoint = #'lg.core.network.Endpoint'{
+          host = "lo",
+          port = 1000
+        }
       }
     }
   }}),
@@ -183,34 +190,6 @@ g_happy_path_bistream_request(Config) ->
       }}
     }) ->
       ?assertNotEqual(<<>>, SessionId)
-    end
-  ),
-  Payload2 = registry_definitions:encode_msg(#'lg.service.router.ControlStreamEvent'{
-    id = #'lg.core.trait.Id'{tag = <<"id-2">>},
-    event = {register_virtual_service_rq, #'lg.service.router.ControlStreamEvent.RegisterVirtualServiceRq'{
-      virtual_service = #'lg.core.grpc.VirtualService'{
-        service = {stateless, #'lg.core.grpc.VirtualService.StatelessVirtualService'{
-          package = <<"foo.bar">>,
-          name = <<"BazService">>,
-          methods = [#'lg.core.grpc.VirtualService.Method'{name = <<"DoSomething">>}]
-        }},
-        endpoint = #'lg.core.network.Endpoint'{
-          host = "lo",
-          port = 1000
-        }
-      }
-    }
-  }}),
-  ok = router_grpc_client:grpc_data(Client, StreamRef, Payload2),
-  assert_data(
-    StreamRef, nofin, 'lg.service.router.ControlStreamEvent',
-    fun(#'lg.service.router.ControlStreamEvent'{
-      id = #'lg.core.trait.Id'{tag = <<"id-2">>},
-      event = {register_virtual_service_rs, #'lg.service.router.ControlStreamEvent.RegisterVirtualServiceRs'{
-        result = #'lg.core.trait.Result'{status = 'SUCCESS'}
-      }}
-    }) ->
-      ok
     end
   ),
   router_grpc_client:grpc_terminate(Client, StreamRef),

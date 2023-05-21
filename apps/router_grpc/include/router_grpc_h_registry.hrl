@@ -2,6 +2,7 @@
 -define(trailer_package_restricted, <<"package_restricted">>).
 -define(trailer_name_empty, <<"name_empty">>).
 -define(trailer_method_empty, <<"method_empty">>).
+-define(trailer_cmp_invalid, <<"cmp_invalid">>).
 -define(trailer_host_empty, <<"host_empty">>).
 -define(trailer_port_invalid, <<"port_invalid">>).
 -define(trailer_filter_endpoint_host_empty, <<"filter_endpoint_host_empty">>).
@@ -13,12 +14,21 @@
 -define(trailer_control_stream_reinit, <<"re_init">>).
 -define(trailer_control_stream_noinit, <<"no_init">>).
 -define(trailer_control_stream_session_expired, <<"session_expired">>).
--define(trailer_control_stream_session_recovery_failed, <<"session_recovery_failed">>).
+-define(trailer_control_stream_session_resume_failed, <<"session_resume_failed">>).
+-define(trailer_fq_service_name_empty, <<"fq_service_name_empty">>).
+-define(trailer_agent_id_empty, <<"agent_id_empty">>).
+-define(trailer_conflict, <<"conflict">>).
+-define(trailer_service_invalid, <<"service_invalid">>).
 
 -define(trailer_package_empty_message(_Package), <<"Virtual service package cannot be empty">>).
 -define(trailer_package_restricted_message(Package), <<"Virtual service package is restricted: ", Package/binary>>).
 -define(trailer_name_empty_message(_Name), <<"Virtual service name cannot be empty">>).
 -define(trailer_method_empty_message(_Name), <<"Virtual service method cannot be empty">>).
+-define(trailer_cmp_invalid_message(Cmp),
+  iolist_to_binary(io_lib:format(
+    "Existing registered virtual service conflict management policy mismatched with the provided one: ~ts",
+    [Cmp]
+  ))).
 -define(trailer_host_empty_message(_Name), <<"Virtual service instance host cannot be empty">>).
 -define(trailer_port_invalid_message(Port), <<"Virtual service instance port must fall into 1..65535 interval: ", (integer_to_binary(Port))/binary>>).
 -define(trailer_filter_endpoint_host_empty_message(_Host), <<"Endpoint filter host cannot be empty with non-zero port">>).
@@ -27,10 +37,33 @@
 -define(trailer_pagination_request_page_size_invalid_message(PageSize), <<"Pagination request page size is invalid: ", (integer_to_binary(PageSize))/binary>>).
 -define(trailer_pagination_request_page_token_invalid_message(PageToken), <<"Pagination request page token is invalid: ", PageToken/binary>>).
 -define(trailer_id_empty_message(_), <<"Request id cannot be empty">>).
--define(trailer_control_stream_reinit_message(_), <<"InitRq was already handled within the control stream">>).
--define(trailer_control_stream_noinit_message(_), <<"InitRq must be handled within the control stream first">>).
+-define(trailer_control_stream_reinit_message_init(_), <<"InitRq was already handled within the control stream">>).
+-define(trailer_control_stream_reinit_message_resume(_), <<"InitRq was already handled within the control stream">>).
+-define(trailer_control_stream_noinit_message(_), <<"InitRq/ResumeRq must be handled within the control stream first">>).
 -define(trailer_control_stream_session_expired_message(_), <<"Session identified by provided id already expired">>).
--define(trailer_control_stream_session_recovery_failed_message(Reason), case Reason of
-  conn_alive -> <<"Session recovery failed: original connection is still alive">>;
-  invalid_endpoint -> <<"Session recovery failed: endpoint parameters do not match original ones">>
+-define(trailer_control_stream_session_resume_failed_message(Reason), case Reason of
+  conn_alive -> <<"Session resume failed: original connection is still alive">>;
+  invalid_endpoint -> <<"Session resume failed: endpoint parameters do not match original ones">>
 end).
+-define(trailer_fq_service_name_empty_message(_), <<"Fully qualified service name cannot be empty">>).
+-define(trailer_agent_id_empty_message(_), <<"Agent id cannot be empty">>).
+-define(trailer_conflict_message(Fqsn, AgentId, AgentInstance),
+  iolist_to_binary(io_lib:format(
+    "Agent ~ts@~ts/~ts is already registered in the system and the conflict management policy is set to 'BLOCKING'",
+    [AgentId, Fqsn, AgentInstance]
+  ))
+).
+-define(trailer_service_invalid_message(Fqsn, Host, Port),
+  iolist_to_binary(io_lib:format(
+    "There is no registered service ~ts@~ts:~p",
+    [Fqsn, Host, Port]
+  ))
+).
+
+-define(control_stream_init_error_message_mismatched_virtual_service,
+  <<"Existing registered virtual service significantly mismatches with the provided one">>).
+
+-define(control_stream_init_error_message_mismatched_virtual_service_cmp, ?trailer_cmp_invalid).
+-define(control_stream_init_error_message_mismatched_virtual_service_cmp_message(Cmp), ?trailer_cmp_invalid_message(Cmp)).
+
+-define(control_stream_conflict_event_reason_preemptive, <<"Force degeristration occured due to conflict management policy: preemptive">>).

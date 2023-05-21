@@ -1,7 +1,7 @@
 {
-  "id": {"tag": "register-1"},
+  "id": {"tag": "init-1"},
   "event": {
-    "register_virtual_service_rq": {
+    "init_rq": {
       "virtual_service": {
         "service": {
           "stateless": {

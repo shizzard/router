@@ -8,9 +8,9 @@ Check if router fails to recover session due to session expiry.
 [include ${ROUTER_DIR_TESTS_LUX}/__common/jq.luxinc]
 [include ${ROUTER_DIR_TESTS_LUX}/__router/registry-service.luxinc]
 
-[global request-file-init-1=json/init-request-1.json]
-[global template-file-init-2=json/init-request-2.template.json]
-[global request-file-init-2=json/init-request-2.json]
+[global request-file-init=json/init-request.json]
+[global template-file-resume=json/resume-request.template.json]
+[global request-file-resume=json/resume-request.json]
 
 [shell router]
   [invoke app-start]
@@ -20,7 +20,7 @@ Check if router fails to recover session due to session expiry.
   [invoke grpcc-start ${grpc-service-name} ${grpc-method-control-stream} json ""]
   [invoke grpcc-conn-up]
   [invoke grpcc-prompt]
-  [invoke grpcc-send-data ${request-file-init-1}]
+  [invoke grpcc-send-data ${request-file-init}]
   [invoke grpcc-prompt]
   [invoke grpcc-recv-headers]
   [global headers=${out}]
@@ -45,13 +45,13 @@ Check if router fails to recover session due to session expiry.
 
 [shell control-stream-2]
   [progress (prepare second init request)]
-  !sed 's~%PLACEHOLDER%~${session-id}~' ${template-file-init-2} > ${request-file-init-2}
+  !sed 's~%PLACEHOLDER%~${session-id}~' ${template-file-resume} > ${request-file-resume}
   ?${sh-prompt}
   [progress (init)]
   [invoke grpcc-start ${grpc-service-name} ${grpc-method-control-stream} json ""]
   [invoke grpcc-conn-up]
   [invoke grpcc-prompt]
-  [invoke grpcc-send-data ${request-file-init-2}]
+  [invoke grpcc-send-data ${request-file-resume}]
   [invoke grpcc-prompt]
   [invoke grpcc-recv-headers]
   [global headers=${out}]

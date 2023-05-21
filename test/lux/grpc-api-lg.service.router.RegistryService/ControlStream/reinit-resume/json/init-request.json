@@ -9,8 +9,7 @@
             "name": "StatefulServiceA",
             "methods": [
               {"name": "MethodOne"}
-            ],
-            "cmp": "BLOCKING"
+            ]
           }
         },
         "endpoint": {

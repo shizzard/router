@@ -14,6 +14,9 @@ import "lg/core/network.proto";
 message RegisterVirtualServiceRq {
   /*
     Virtual service to be registered.
+    If another virtual service with the same `virtual_service.service.package`
+    and `virtual_service.service.name` was registered prior to registration, all
+    `virtual_service.service` fields must match previous registrations.
   */
   lg.core.grpc.VirtualService virtual_service = 1;
 }
@@ -141,32 +144,25 @@ message ControlStreamEvent {
   /*
     The InitRq message is used to initiate a new control stream. Clients must
     send this request first when opening a new control stream. It contains
-    the request's ID, an optional session ID for resuming a previous session,
-    and the network endpoint.
+    an optional session ID for resuming a previous session, and the virtual
+    service definition.
   */
   message InitRq {
     /*
-      The session ID for resuming a previous session.
-      - Must be empty when initiating a new stream with no previous context.
-      - Must be set to the session identifier of a previously ended stream
-        when reconnecting to the session and resuming it.
+      Virtual service to be used for agents registration. The virtual service
+      will be automatically registered in the system in the same way as
+      `RegisterVirtualServiceRq` request is handled.
     */
-    string session_id = 1;
-
-    /*
-      The network endpoint associated with the virtual service, as defined
-      in the lg.core.network package.
-    */
-    lg.core.network.Endpoint endpoint = 2;
+    lg.core.grpc.VirtualService virtual_service = 1;
   }
 
 
 
   /*
     The InitRs message is a response to the InitRq message. Clients must wait
-    for this message before sending any subsequent requests. It contains the
-    request's ID, a session ID for resuming a disrupted session, and a Result
-    object that indicates the outcome of the initialization request.
+    for this message before sending any subsequent requests. It contains a
+    session ID for resuming a disrupted session, and a Result object that
+    indicates the outcome of the initialization request.
   */
   message InitRs {
     /*
@@ -187,55 +183,47 @@ message ControlStreamEvent {
 
 
   /*
-    The RegisterVirtualServiceRq message is used to request the registration
-    of a virtual service, containing the service's ID and its associated
-    VirtualService object.
+    The ResumeRq message is used to resume a disrupted control stream. Clients
+    must send this request first when opening a new stream.
   */
-  message RegisterVirtualServiceRq {
+  message ResumeRq {
     /*
-      The VirtualService object associated with the virtual service, as
-      defined in the lg.core.grpc package.
+      The session ID for resuming a previous session. Must be set to the session
+      identifier (see `InitRs` event) of a previously ended stream when
+      reconnecting to the session and resuming it.
     */
-    lg.core.grpc.VirtualService virtual_service = 1;
+    string session_id = 1;
   }
 
 
 
   /*
-    The RegisterVirtualServiceRs message is a response to the
-    RegisterVirtualServiceRq message, confirming the registration of a virtual
-    service. Clients must wait for this message before sending any subsequent
-    requests referencing registered virtual service. It contains the request's
-    ID.
+    The ResumeRs message is a response to the ResumeRq message. Clients must
+    wait for this message before sending any subsequent requests. It contains a
+    Result object that indicates the outcome of the resuming request.
   */
-  message RegisterVirtualServiceRs {
+  message ResumeRs {
     /*
       The Result object from the lg.core.trait package, indicating the outcome
-      of the registration request. Possible error codes include:
+      of the resuming request. Possible error codes include:
       - ERROR_INVALID_ARGUMENT
+      - ERROR_ENDPOINT_UNREACHABLE
     */
-    lg.core.trait.Result result = 1;
+    lg.core.trait.Result result = 2;
   }
 
 
 
   /*
     The RegisterAgentRq message is used to request the registration of an agent
-    with a specific virtual service. It contains the request's ID, a
-    fully-qualified virtual service name, an agent ID, and an optional agent
-    instance ID.
+    with a specific virtual service. It contains an agent ID, and an optional
+    agent instance ID.
   */
   message RegisterAgentRq {
     /*
-      The fully-qualified virtual service name for which the agent is being
-      registered.
-    */
-    string fq_service_name = 1;
-
-    /*
       The required agent ID.
     */
-    string agent_id = 2;
+    string agent_id = 1;
 
     /*
       The agent instance ID.
@@ -243,7 +231,7 @@ message ControlStreamEvent {
       - To register the agent as a singleton, set this field equal to the
         agent_id value.
     */
-    string agent_instance = 3;
+    string agent_instance = 2;
   }
 
 
@@ -251,9 +239,9 @@ message ControlStreamEvent {
   /*
     The RegisterAgentRs message is a response to the RegisterAgentRq message,
     confirming the registration of an agent with a specific virtual service or
-    reporting any errors encountered during the process. It contains the request's
-    ID, agent ID, agent instance ID, and a Result object indicating the outcome
-    of the registration request.
+    reporting any errors encountered during the process. It contains agent ID,
+    agent instance ID, and a Result object indicating the outcome of the
+    registration request.
   */
   message RegisterAgentRs {
     /*
@@ -280,25 +268,19 @@ message ControlStreamEvent {
 
   /*
     The UnregisterAgentRq message is used to request the unregistration of an
-    agent from a specific virtual service. It contains the request's ID, a
-    fully-qualified virtual service name, an agent ID, and an agent instance ID.
+    agent from a specific virtual service. It contains an agent ID, and an
+    agent instance ID.
   */
   message UnregisterAgentRq {
     /*
-      The fully-qualified virtual service name from which the agent is being
-      unregistered.
-    */
-    string fq_service_name = 1;
-
-    /*
       The required agent ID.
     */
-    string agent_id = 2;
+    string agent_id = 1;
 
     /*
       The required agent instance ID.
     */
-    string agent_instance = 3;
+    string agent_instance = 2;
   }
 
 
@@ -330,25 +312,20 @@ message ControlStreamEvent {
   */
   message ConflictEvent {
     /*
-      The fully-qualified virtual service name where the conflict occurred.
-    */
-    string fq_service_name = 1;
-
-    /*
       The conflicting agent ID.
     */
-    string agent_id = 2;
+    string agent_id = 1;
 
     /*
       The conflicting agent instance ID.
     */
-    string agent_instance = 3;
+    string agent_instance = 2;
 
     /*
       A human-readable reason for the conflict. Clients should not rely on the
       specific contents of this field.
     */
-    string reason = 5;
+    string reason = 3;
   }
 
 
@@ -362,13 +339,13 @@ message ControlStreamEvent {
   oneof event {
     InitRq init_rq = 2;
     InitRs init_rs = 3;
-    RegisterVirtualServiceRq register_virtual_service_rq = 4;
-    RegisterVirtualServiceRs register_virtual_service_rs = 5;
-    RegisterAgentRq register_agent_rq = 6;
-    RegisterAgentRs register_agent_rs = 7;
-    UnregisterAgentRq unregister_agent_rq = 8;
-    UnregisterAgentRs unregister_agent_rs = 9;
-    ConflictEvent conflict_event = 10;
+    RegisterAgentRq register_agent_rq = 4;
+    RegisterAgentRs register_agent_rs = 5;
+    UnregisterAgentRq unregister_agent_rq = 6;
+    UnregisterAgentRs unregister_agent_rs = 7;
+    ConflictEvent conflict_event = 8;
+    ResumeRs resume_rs = 9;
+    ResumeRq resume_rq = 10;
   }
 }
 

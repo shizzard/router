@@ -56,6 +56,7 @@ end_per_group(_Name, _Config) ->
   ok.
 
 end_per_suite(_Config) ->
+  ok = application:stop(gproc),
   ok = application:stop(cowboy),
   ok = application:stop(router_grpc),
   ok.
@@ -86,11 +87,12 @@ g_lookup_fqmn_internal_registry_service(_Config) ->
 
 
 g_register_stateless(_Config) ->
-  ok = router_grpc_service_registry:register(
+  {ok, _} = router_grpc_service_registry:register(
     Type = stateless,
     Package = <<"lg.test">>,
     ServiceName = <<"StatelessService">>,
     _Methods = [<<"MethodOne">>, <<"MethodTwo">>],
+    _Cmp = undefined,
     _Maintenance = false,
     Host = <<"test.lg">>,
     Port = 8137
@@ -100,7 +102,7 @@ g_register_stateless(_Config) ->
 
 
 g_register_stateful(_Config) ->
-  ok = router_grpc_service_registry:register(
+  {ok, _} = router_grpc_service_registry:register(
     Type = stateful,
     Package = <<"lg.test">>,
     ServiceName = <<"StatefulService">>,
@@ -115,11 +117,12 @@ g_register_stateful(_Config) ->
 
 
 g_lookup_fqmn_external_stateless(_Config) ->
-  ok = router_grpc_service_registry:register(
+  {ok, _} = router_grpc_service_registry:register(
     Type = stateless,
     Package = <<"lg.test">>,
     ServiceName = <<"StatelessService">>,
     _Methods = [<<"MethodOne">>, <<"MethodTwo">>],
+    _Cmp = undefined,
     _Maintenance = false,
     Host = <<"test.lg">>,
     Port = 8137
@@ -136,7 +139,7 @@ g_lookup_fqmn_external_stateless(_Config) ->
 
 
 g_lookup_fqmn_external_stateful(_Config) ->
-  ok = router_grpc_service_registry:register(
+  {ok, _} = router_grpc_service_registry:register(
     Type = stateful,
     Package = <<"lg.test">>,
     ServiceName = <<"StatefulService">>,
@@ -158,7 +161,7 @@ g_lookup_fqmn_external_stateful(_Config) ->
 
 
 g_lookup_fqmn_external_duplicate(_Config) ->
-  ok = router_grpc_service_registry:register(
+  {ok, _} = router_grpc_service_registry:register(
     Type = stateful,
     Package = <<"lg.test">>,
     ServiceName = <<"StatefulService">>,
@@ -168,7 +171,7 @@ g_lookup_fqmn_external_duplicate(_Config) ->
     Host = <<"test.lg">>,
     Port = 8137
   ),
-  ok = router_grpc_service_registry:register(Type, Package, ServiceName, Methods, Cmp, Maintenance, Host, Port),
+  {ok, _} = router_grpc_service_registry:register(Type, Package, ServiceName, Methods, Cmp, Maintenance, Host, Port),
   Fqmns = [
     <<"/lg.test.StatefulService/MethodOne">>,
     <<"/lg.test.StatefulService/MethodTwo">>
@@ -185,11 +188,12 @@ g_lookup_fqmn_external_duplicate(_Config) ->
 
 
 g_lookup_fqsn_stateless(_Config) ->
-  ok = router_grpc_service_registry:register(
+  {ok, _} = router_grpc_service_registry:register(
     Type = stateless,
     Package = <<"lg.test">>,
     ServiceName = <<"StatelessService">>,
     _Methods = [<<"MethodOne">>, <<"MethodTwo">>],
+    _Cmp = undefined,
     _Maintenance = false,
     Host = <<"test.lg">>,
     Port = 8137
@@ -201,7 +205,7 @@ g_lookup_fqsn_stateless(_Config) ->
 
 
 g_lookup_fqsn_stateful(_Config) ->
-  ok = router_grpc_service_registry:register(
+  {ok, _} = router_grpc_service_registry:register(
     Type = stateful,
     Package = <<"lg.test">>,
     ServiceName = <<"StatefulService">>,

@@ -9,7 +9,7 @@
 -include_lib("typr/include/typr_specs_gen_server.hrl").
 
 -export([
-  restricted_packages/0, register/7, register/8, unregister/5,
+  restricted_packages/0, register/8, unregister/5,
   lookup_fqmn/1, lookup_fqmn_internal/1, lookup_fqmn_external/1,
   lookup_fqsn/4,
   get_list/1, get_list/2, get_list/3, is_maintenance/3, set_maintenance/4
@@ -18,8 +18,7 @@
 
 -define(table_registry, router_grpc_service_registry_table_registry).
 -define(table_lookup, router_grpc_service_registry_table_lookup).
--define(table_registry_key(Type, ServiceName, Host, Port), {Type, ServiceName, Host, Port}).
--define(table_lookup_key(Path), {Path}).
+-define(table_registry_key(Type, Fqsn, Host, Port), {Type, Fqsn, Host, Port}).
 -define(persistent_term_key_internal(Path), {?MODULE, persistent_term_key_internal, Path}).
 -define(
   persistent_term_key_external_maintenance(ServiceName, Host, Port),
@@ -33,40 +32,26 @@
 }).
 -type state() :: #state{}.
 
--type table_registry_key() :: ?table_registry_key(
-  Type :: service_type(), ServiceName :: service_name(), Host :: endpoint_host(), Port :: endpoint_port()
-).
--type table_lookup_key() :: ?table_lookup_key(Path :: fq_method_name()).
--type service_type() :: stateless | stateful.
--type service_package() :: binary().
--type service_name() :: binary().
--type fq_service_name() :: binary().
--type fq_method_name() :: binary().
--type method_name() :: binary().
--type service_maintenance() :: boolean().
--type endpoint_host() :: binary().
--type endpoint_port() :: 0..65535.
--export_type([
-  table_registry_key/0, table_lookup_key/0, service_type/0, service_package/0, service_name/0,
-  fq_service_name/0, fq_method_name/0, method_name/0, service_maintenance/0, endpoint_host/0, endpoint_port/0
-]).
+-record(lookup_index, {
+  fqmn :: router_grpc:fq_method_name(),
+  registry_keys :: [table_registry_key(), ...]
+}).
 
--type definition() :: definition_internal() | definition_external().
--type definition_internal() :: #router_grpc_service_registry_definition_internal{}.
--type definition_external() :: #router_grpc_service_registry_definition_external{}.
--export_type([definition/0, definition_internal/0, definition_external/0]).
+-type table_registry_key() :: ?table_registry_key(
+  Type :: router_grpc:service_type(),
+  ServiceName :: router_grpc:fq_service_name(),
+  Host :: router_grpc:endpoint_host(),
+  Port :: router_grpc:endpoint_port()
+).
+
+-export_type([table_registry_key/0]).
 
 
 
 %% Messages
-
 -define(
-  call_register_stateless(Type, Package, ServiceName, Methods, Maintenance, Host, Port),
-  {call_register_stateless, Type, Package, ServiceName, Methods, Maintenance, Host, Port}
-).
--define(
-  call_register_stateful(Type, Package, ServiceName, Methods, Cmp, Maintenance, Host, Port),
-  {call_register_stateful, Type, Package, ServiceName, Methods, Cmp, Maintenance, Host, Port}
+  call_register(Type, Package, ServiceName, Methods, Cmp, Maintenance, Host, Port),
+  {call_register, Type, Package, ServiceName, Methods, Cmp, Maintenance, Host, Port}
 ).
 -define(
   call_unregister(Type, Package, ServiceName, Host, Port),
@@ -92,48 +77,31 @@ restricted_packages() -> ?restricted_packages.
 
 
 -spec register(
-  Type :: service_type(),
-  Package :: service_package(),
-  ServiceName :: service_name(),
-  Methods :: [method_name(), ...],
-  Maintenance :: service_maintenance(),
-  Host :: endpoint_host(),
-  Port :: endpoint_port()
+  Type :: router_grpc:service_type(),
+  Package :: router_grpc:service_package(),
+  ServiceName :: router_grpc:service_name(),
+  Methods :: [router_grpc:method_name(), ...],
+  Cmp :: registry_definitions:'lg.core.grpc.VirtualService.StatefulVirtualService.ConflictManagementPolicy'() | undefined,
+  Maintenance :: router_grpc:service_maintenance(),
+  Host :: router_grpc:endpoint_host(),
+  Port :: router_grpc:endpoint_port()
 ) ->
   typr:generic_return(
-    ErrorRet :: term()
+    OkRet :: router_grpc:definition_external(),
+    ErrorRet :: [InvalidField :: atom(), ...]
   ).
 
-register(stateless, Package, ServiceName, Methods, Maintenance, Host, Port) ->
-  gen_server:call(?MODULE, ?call_register_stateless(stateless, Package, ServiceName, Methods, Maintenance, Host, Port)).
-
-
-
--spec register(
-  Type :: service_type(),
-  Package :: service_package(),
-  ServiceName :: service_name(),
-  Methods :: [method_name(), ...],
-  Cmp :: registry_definitions:'lg.core.grpc.VirtualService.StatefulVirtualService.ConflictManagementPolicy'(),
-  Maintenance :: service_maintenance(),
-  Host :: endpoint_host(),
-  Port :: endpoint_port()
-) ->
-  typr:generic_return(
-    ErrorRet :: term()
-  ).
-
-register(stateful, Package, ServiceName, Methods, Cmp, Maintenance, Host, Port) ->
-  gen_server:call(?MODULE, ?call_register_stateful(stateful, Package, ServiceName, Methods, Cmp, Maintenance, Host, Port)).
+register(Type, Package, ServiceName, Methods, Cmp, Maintenance, Host, Port) ->
+  gen_server:call(?MODULE, ?call_register(Type, Package, ServiceName, Methods, Cmp, Maintenance, Host, Port)).
 
 
 
 -spec unregister(
-  Type :: service_type(),
-  Package :: service_package(),
-  ServiceName :: service_name(),
-  Host :: endpoint_host(),
-  Port :: endpoint_port()
+  Type :: router_grpc:service_type(),
+  Package :: router_grpc:service_package(),
+  ServiceName :: router_grpc:service_name(),
+  Host :: router_grpc:endpoint_host(),
+  Port :: router_grpc:endpoint_port()
 ) ->
   typr:generic_return(
     ErrorRet :: term()
@@ -144,9 +112,9 @@ unregister(Type, Package, ServiceName, Host, Port) ->
 
 
 
--spec lookup_fqmn(Fqmn :: fq_method_name()) ->
+-spec lookup_fqmn(Fqmn :: router_grpc:fq_method_name()) ->
   typr:generic_return(
-    OkRet :: [definition(), ...],
+    OkRet :: [router_grpc:definition(), ...],
     ErrorRet :: undefined
   ).
 
@@ -158,9 +126,9 @@ lookup_fqmn(Fqmn) ->
 
 
 
--spec lookup_fqmn_internal(Fqmn :: fq_method_name()) ->
+-spec lookup_fqmn_internal(Fqmn :: router_grpc:fq_method_name()) ->
   typr:generic_return(
-    OkRet :: [definition_internal(), ...],
+    OkRet :: [router_grpc:definition_internal(), ...],
     ErrorRet :: undefined
   ).
 
@@ -172,33 +140,37 @@ lookup_fqmn_internal(Fqmn) ->
 
 
 
--spec lookup_fqmn_external(Fqmn :: fq_method_name()) ->
+-spec lookup_fqmn_external(Fqmn :: router_grpc:fq_method_name()) ->
   typr:generic_return(
-    OkRet :: [definition_external(), ...],
+    OkRet :: [router_grpc:definition_external(), ...],
     ErrorRet :: undefined
   ).
 
 lookup_fqmn_external(Fqmn) ->
-  case ets:lookup(?table_lookup, ?table_lookup_key(Fqmn)) of
+  case ets:lookup(?table_lookup, Fqmn) of
     [] -> {error, undefined};
-    Definitions -> {ok, Definitions}
+    [#lookup_index{registry_keys = RegistryKeys}] ->
+      {ok, lists:map(fun(RegistryId) ->
+        [Definition] = ets:lookup(?table_registry, RegistryId),
+        Definition
+      end, RegistryKeys)}
   end.
 
 
 
 -spec lookup_fqsn(
-  Package :: service_type(),
-  ServiceName :: fq_service_name(),
-  Host :: endpoint_host(),
-  Port :: endpoint_port()
+  Package :: router_grpc:service_type(),
+  ServiceName :: router_grpc:fq_service_name(),
+  Host :: router_grpc:endpoint_host(),
+  Port :: router_grpc:endpoint_port()
 ) ->
   typr:generic_return(
-    OkRet :: [definition_external()],
+    OkRet :: [router_grpc:definition_external()],
     ErrorRet :: undefined
   ).
 
-lookup_fqsn(Type, FqServiceName, Host, Port) ->
-  case ets:lookup(?table_registry, ?table_registry_key(Type, FqServiceName, Host, Port)) of
+lookup_fqsn(Type, Fqsn, Host, Port) ->
+  case ets:lookup(?table_registry, ?table_registry_key(Type, Fqsn, Host, Port)) of
     [] -> {error, undefined};
     Definitions -> {ok, Definitions}
   end.
@@ -207,7 +179,7 @@ lookup_fqsn(Type, FqServiceName, Host, Port) ->
 
 -spec get_list(PageSize :: pos_integer()) ->
   typr:generic_return(
-    OkRet :: {List :: [definition_external()], NextPageToken :: router_grpc_pagination:page_token() | undefined},
+    OkRet :: {List :: [router_grpc:definition_external()], NextPageToken :: router_grpc_pagination:page_token() | undefined},
     ErrorRet :: invalid_token
   ).
 
@@ -220,7 +192,7 @@ get_list(PageSize) -> get_list(#{}, undefined, PageSize).
   PageSize :: pos_integer()
 ) ->
   typr:generic_return(
-    OkRet :: {List :: [definition_external()], NextPageToken :: router_grpc_pagination:page_token() | undefined},
+    OkRet :: {List :: [router_grpc:definition_external()], NextPageToken :: router_grpc_pagination:page_token() | undefined},
     ErrorRet :: invalid_token
   ).
 
@@ -238,7 +210,7 @@ get_list(Filters, PageSize) when is_map(Filters) ->
   PageSize :: pos_integer()
 ) ->
   typr:generic_return(
-    OkRet :: {List :: [definition_external()], NextPageToken :: router_grpc_pagination:page_token() | undefined},
+    OkRet :: {List :: [router_grpc:definition_external()], NextPageToken :: router_grpc_pagination:page_token() | undefined},
     ErrorRet :: invalid_token
   ).
 
@@ -260,24 +232,31 @@ get_list(Filters, PageToken, PageSize) ->
 
 
 
--spec is_maintenance(FqServiceName :: fq_service_name(), Host :: endpoint_host(), Port :: endpoint_port()) ->
+-spec is_maintenance(
+  Fqsn :: router_grpc:fq_service_name(),
+  Host :: router_grpc:endpoint_host(),
+  Port :: router_grpc:endpoint_port()
+) ->
   Ret :: boolean().
 
-is_maintenance(FqServiceName, Host, Port) ->
-  persistent_term:get(?persistent_term_key_external_maintenance(FqServiceName, Host, Port), false).
+is_maintenance(Fqsn, Host, Port) ->
+  persistent_term:get(?persistent_term_key_external_maintenance(Fqsn, Host, Port), false).
 
 
 
 -spec set_maintenance(
-  FqServiceName :: fq_service_name(), Host :: endpoint_host(), Port :: endpoint_port(), Bool :: boolean()
+  Fqsn :: router_grpc:fq_service_name(),
+  Host :: router_grpc:endpoint_host(),
+  Port :: router_grpc:endpoint_port(),
+  Bool :: boolean()
 ) ->
   Ret :: typr:ok_return().
 
-set_maintenance(FqServiceName, Host, Port, true) ->
-  persistent_term:put(?persistent_term_key_external_maintenance(FqServiceName, Host, Port), true);
+set_maintenance(Fqsn, Host, Port, true) ->
+  persistent_term:put(?persistent_term_key_external_maintenance(Fqsn, Host, Port), true);
 
-set_maintenance(FqServiceName, Host, Port, false) ->
-  _ = persistent_term:erase(?persistent_term_key_external_maintenance(FqServiceName, Host, Port)),
+set_maintenance(Fqsn, Host, Port, false) ->
+  _ = persistent_term:erase(?persistent_term_key_external_maintenance(Fqsn, Host, Port)),
   ok.
 
 
@@ -301,7 +280,7 @@ init({ServiceDefinitions, ServiceMap}) ->
       {keypos, #router_grpc_service_registry_definition_external.id}]
     ),
     table_lookup = ets:new(?table_lookup,
-      [duplicate_bag, protected, named_table, {read_concurrency, true},
+      [ordered_set, protected, named_table, {read_concurrency, true},
       {keypos, #router_grpc_service_registry_definition_external.id}]
     )
   },
@@ -314,52 +293,43 @@ init({ServiceDefinitions, ServiceMap}) ->
 
 
 
-handle_call(?call_register_stateless(Type, Package, ServiceName, Methods, Maintenance, Host, Port), _GenReplyTo, S0) ->
-  FqServiceName = <<Package/binary, ".", ServiceName/binary>>,
-  RegistryId = ?table_registry_key(Type, FqServiceName, Host, Port),
+handle_call(?call_register(Type, Package, ServiceName, Methods, Cmp, Maintenance, Host, Port), _GenReplyTo, S0) ->
+  Fqsn = <<Package/binary, ".", ServiceName/binary>>,
+  RegistryId = ?table_registry_key(Type, Fqsn, Host, Port),
   RegistryDefinition = #router_grpc_service_registry_definition_external{
-    id = RegistryId, type = Type, package = Package, service = ServiceName,
-    fq_service = FqServiceName, methods = Methods, host = Host, port = Port
+    id = RegistryId, type = Type, package = Package, service_name = ServiceName,
+    fq_service_name = Fqsn, methods = Methods, cmp = Cmp, host = Host, port = Port
   },
-  case ets:insert_new(S0#state.table_registry, RegistryDefinition) of
-    true ->
-      lists:foreach(fun(MethodName) ->
-        Fqmn = <<"/", FqServiceName/binary, "/", MethodName/binary>>,
-        LookupId = ?table_lookup_key(Fqmn),
-        LookupDefinition = RegistryDefinition#router_grpc_service_registry_definition_external{id = LookupId},
-        ets:insert(S0#state.table_lookup, LookupDefinition)
-      end, Methods),
-      case Maintenance of
-        true -> set_maintenance(ServiceName, Host, Port, Maintenance);
-        false -> ok
+  Fqmns = lists:map(fun(MethodName) -> <<"/", Fqsn/binary, "/", MethodName/binary>> end, Methods),
+  case ets:select(S0#state.table_registry, register_match_spec(Type, Fqsn)) of
+    [] ->
+      %% Inserting very first FQSN
+      ets:insert(S0#state.table_registry, RegistryDefinition),
+      [ets:insert(S0#state.table_lookup, #lookup_index{fqmn = Fqmn, registry_keys = [RegistryId]}) || Fqmn <- Fqmns],
+      if
+        Maintenance -> set_maintenance(ServiceName, Host, Port, Maintenance);
+        true -> ok
       end,
-      {reply, ok, S0};
-    false ->
-      {reply, ok, S0}
-  end;
-
-handle_call(?call_register_stateful(Type, Package, ServiceName, Methods, Cmp, Maintenance, Host, Port), _GenReplyTo, S0) ->
-  FqServiceName = <<Package/binary, ".", ServiceName/binary>>,
-  RegistryId = ?table_registry_key(Type, FqServiceName, Host, Port),
-  RegistryDefinition = #router_grpc_service_registry_definition_external{
-    id = RegistryId, type = Type, package = Package, service = ServiceName,
-    fq_service = FqServiceName, methods = Methods, cmp = Cmp, host = Host, port = Port
-  },
-  case ets:insert_new(S0#state.table_registry, RegistryDefinition) of
-    true ->
-      lists:foreach(fun(MethodName) ->
-        Fqmn = <<"/", FqServiceName/binary, "/", MethodName/binary>>,
-        LookupId = ?table_lookup_key(Fqmn),
-        LookupDefinition = RegistryDefinition#router_grpc_service_registry_definition_external{id = LookupId},
-        ets:insert(S0#state.table_lookup, LookupDefinition)
-      end, Methods),
-      case Maintenance of
-        true -> set_maintenance(ServiceName, Host, Port, Maintenance);
-        false -> ok
-      end,
-      {reply, ok, S0};
-    false ->
-      {reply, ok, S0}
+      {reply, {ok, RegistryDefinition}, S0};
+    [#router_grpc_service_registry_definition_external{} = ExistingDefinition | _] ->
+      %% Inserting already existing FQSN; carefully update the lookup index here
+      case compare_definitions(RegistryDefinition, ExistingDefinition) of
+        {ok, match} ->
+          ets:insert(S0#state.table_registry, RegistryDefinition),
+          [begin
+            [#lookup_index{} = LookupIndex] = ets:lookup(S0#state.table_lookup, Fqmn),
+            ets:insert(S0#state.table_lookup, LookupIndex#lookup_index{
+              fqmn = Fqmn, registry_keys = lists:uniq([RegistryId | LookupIndex#lookup_index.registry_keys])
+            })
+          end || Fqmn <- Fqmns],
+          if
+            Maintenance -> set_maintenance(ServiceName, Host, Port, Maintenance);
+            true -> ok
+          end,
+          {reply, {ok, RegistryDefinition}, S0};
+        {error, InvalidFields} ->
+          {reply, {error, InvalidFields}, S0}
+      end
   end;
 
 handle_call(?call_unregister(Type, Package, ServiceName, Host, Port), _GenReplyTo, S0) ->
@@ -403,10 +373,10 @@ code_change(_OldVsn, S0, _Extra) ->
 %% > violates the declared type of ...
 -dialyzer({nowarn_function, [handle_call_unregister/6]}).
 handle_call_unregister(Type, Package, ServiceName, Host, Port, S0) ->
-  FqServiceName = <<Package/binary, ".", ServiceName/binary>>,
-  true = ets:delete(S0#state.table_registry, ?table_registry_key(Type, FqServiceName, Host, Port)),
+  Fqsn = <<Package/binary, ".", ServiceName/binary>>,
+  true = ets:delete(S0#state.table_registry, ?table_registry_key(Type, Fqsn, Host, Port)),
   true = ets:match_delete(S0#state.table_lookup, #router_grpc_service_registry_definition_external{
-    service = ServiceName, host = Host, port = Port, _ = '_'
+    fq_service_name = Fqsn, host = Host, port = Port, _ = '_'
   }),
   {reply, ok, S0}.
 
@@ -449,7 +419,7 @@ init_internals_service_methods(ServiceName, ServiceDefinition, Methods, ModuleNa
           MethodNameBin = atom_to_binary(MethodName),
           PathBin = <<"/", ServiceNameBin/binary, "/", MethodNameBin/binary>>,
           Definition = #router_grpc_service_registry_definition_internal{
-            definition = ServiceDefinition, service = ServiceNameBin, method = MethodNameBin,
+            definition = ServiceDefinition, service_name = ServiceNameBin, method = MethodNameBin,
             module = ModuleName, function = FunctionName, input = Input, output = Output,
             input_stream = InputStream, output_stream = OutputStream, opts = Opts
           },
@@ -524,7 +494,7 @@ get_list_match_spec_fun(undefined, {undefined, undefined}) ->
 
 % ets:fun2ms(
 %   fun(#router_grpc_service_registry_definition_external{
-%     id = Id, fq_service = Fqsn, _ = '_'
+%     id = Id, fq_service_name = Fqsn, _ = '_'
 %   } = Obj)
 %   when Id >= Key, Fqsn == FqFilter ->
 %     Obj
@@ -532,7 +502,7 @@ get_list_match_spec_fun(undefined, {undefined, undefined}) ->
 % )
 get_list_match_spec_fun(FqFilter, {undefined, undefined}) ->
   fun(Key) ->
-    [{#router_grpc_service_registry_definition_external{id = '$1', fq_service = '$2', _ = '_'},
+    [{#router_grpc_service_registry_definition_external{id = '$1', fq_service_name = '$2', _ = '_'},
       [{'>=', '$1', {const,Key}}, {'==', '$2', {const,FqFilter}}],
       ['$_']
     }]
@@ -556,7 +526,7 @@ get_list_match_spec_fun(undefined, {Host, Port}) ->
 
 % ets:fun2ms(
 %   fun(#router_grpc_service_registry_definition_external{
-%     id = Id, fq_service = Fqsn, host = Host_, port = Port_, _ = '_'
+%     id = Id, fq_service_name = Fqsn, host = Host_, port = Port_, _ = '_'
 %   } = Obj)
 %   when Id >= Key, Fqsn == FqFilter, Host == Host_, Port == Port_ ->
 %     Obj
@@ -565,12 +535,47 @@ get_list_match_spec_fun(undefined, {Host, Port}) ->
 get_list_match_spec_fun(FqFilter, {Host, Port}) ->
   fun(Key) ->
     [{#router_grpc_service_registry_definition_external{
-      id = '$1', fq_service = '$2', host = '$3', port = '$4', _ = '_'},
+      id = '$1', fq_service_name = '$2', host = '$3', port = '$4', _ = '_'},
       [{'>=', '$1', {const,Key}}, {'==', '$2', {const,FqFilter}}, {'==', {const,Host}, '$3'}, {'==', {const,Port}, '$4'}],
       ['$_']
     }]
   end.
 
 
+%% This function causes dialyzer error regarding record construction:
+%% > Record construction
+%% > #router_grpc_service_registry_definition_external{... :: '_'}
+%% > violates the declared type of ...
+-dialyzer({nowarn_function, [register_match_spec/2]}).
+
+% ets:fun2ms(
+%   fun(#router_grpc_service_registry_definition_external{
+%     id = ?table_registry_key(Type_, Fqsn_, '_', '_')
+%   } = Obj)
+%   when Type == Type_, Fqsn == Fqsn_ ->
+%     Obj
+%   end
+% )
+register_match_spec(Type, Fqsn) ->
+  [{#router_grpc_service_registry_definition_external{
+    id = {'$1', '$2', '_', '_'}, _ = '_'},
+    [{'==', '$1', {const,Type}}, {'==', '$2', {const,Fqsn}}],
+    ['$_']
+  }].
+
+
 
 key_take(#router_grpc_service_registry_definition_external{id = Id}) -> Id.
+
+
+
+%% The only one field we're interested here is cmp (conflict management policy).
+%% Package and service name are key fields and will match anyway.
+%% Methods list may vary due to rolling deployment processes or API update.
+%% Maintenance is set per virtual service and is also unrelated to this comparison.
+compare_definitions(
+  #router_grpc_service_registry_definition_external{cmp = Cmp},
+  #router_grpc_service_registry_definition_external{cmp = Cmp}
+) -> {ok, match};
+
+compare_definitions(_, _) -> {error, [cmp]}.

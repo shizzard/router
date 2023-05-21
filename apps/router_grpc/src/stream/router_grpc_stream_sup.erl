@@ -4,7 +4,7 @@
 -include_lib("router_log/include/router_log.hrl").
 -include_lib("typr/include/typr_specs_supervisor.hrl").
 
--export([start_handler/3, lookup_handler/1, recover_handler/4, start_link/0, init/1]).
+-export([start_handler/4, lookup_handler/1, recover_handler/2, start_link/0, init/1]).
 
 
 
@@ -14,13 +14,14 @@
 
 -spec start_handler(
   SessionId :: router_grpc_stream_h:session_id(),
-  Host :: router_grpc_service_registry:endpoint_host(),
-  Port :: router_grpc_service_registry:endpoint_port()
+  DefinitionInternal :: router_grpc:definition_internal(),
+  DefinitionExternal :: router_grpc:definition_external(),
+  ConnReq :: cowboy_req:req()
 ) ->
   type:ok_return(OkRet :: pid()).
 
-start_handler(SessionId, Host, Port) ->
-  supervisor:start_child(?MODULE, [SessionId, Host, Port, self()]).
+start_handler(SessionId, DefinitionInternal, DefinitionExternal, ConnReq) ->
+  supervisor:start_child(?MODULE, [SessionId, DefinitionInternal, DefinitionExternal, ConnReq, self()]).
 
 
 
@@ -39,14 +40,12 @@ lookup_handler(SessionId) ->
 
 -spec recover_handler(
   Pid :: pid(),
-  SessionId :: router_grpc_stream_h:session_id(),
-  Host :: router_grpc_service_registry:endpoint_host(),
-  Port :: router_grpc_service_registry:endpoint_port()
+  SessionId :: router_grpc_stream_h:session_id()
 ) ->
   type:ok_return(OkRet :: pid()).
 
-recover_handler(Pid, SessionId, Host, Port) ->
-  router_grpc_stream_h:recover(Pid, SessionId, Host, Port, self()).
+recover_handler(Pid, SessionId) ->
+  router_grpc_stream_h:recover(Pid, SessionId, self()).
 
 
 
