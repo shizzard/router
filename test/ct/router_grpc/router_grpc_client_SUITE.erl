@@ -162,10 +162,11 @@ g_happy_path_bistream_request(Config) ->
     id = #'lg.core.trait.Id'{tag = <<"id-1">>},
     event = {init_rq, #'lg.service.router.ControlStreamEvent.InitRq'{
       virtual_service = #'lg.core.grpc.VirtualService'{
-        service = {stateless, #'lg.core.grpc.VirtualService.StatelessVirtualService'{
+        service = {stateful, #'lg.core.grpc.VirtualService.StatefulVirtualService'{
           package = <<"foo.bar">>,
           name = <<"BazService">>,
-          methods = [#'lg.core.grpc.VirtualService.Method'{name = <<"DoSomething">>}]
+          methods = [#'lg.core.grpc.VirtualService.Method'{name = <<"DoSomething">>}],
+          cmp = 'BLOCKING'
         }},
         endpoint = #'lg.core.network.Endpoint'{
           host = "lo",
@@ -207,7 +208,9 @@ assert_response(StreamRef, IsFin, Status, Headers) ->
       ?assertEqual(IsFin, IsFin_),
       ?assertEqual(Status, Status_),
       [?assert(proplists:is_defined(Header, Headers_)) || Header <- Headers]
-  after ?rcv_timeout -> error(didnt_get_grpc_response)
+  after ?rcv_timeout ->
+    dump_msgs(),
+    error(didnt_get_grpc_response)
   end.
 
 
@@ -217,7 +220,9 @@ assert_data(StreamRef, IsFin, Type, DataFn) ->
     ?grpc_event_data(StreamRef, IsFin_, Data) ->
       ?assertEqual(IsFin, IsFin_),
       DataFn(?definition:decode_msg(Data, Type))
-  after ?rcv_timeout -> error(didnt_get_grpc_data)
+  after ?rcv_timeout ->
+    dump_msgs(),
+    error(didnt_get_grpc_data)
   end.
 
 
@@ -228,7 +233,9 @@ assert_trailers(StreamRef, Trailers) ->
       maps:foreach(fun(TK, TV) ->
         ?assertEqual(TV, proplists:get_value(TK, Trailers_))
       end, Trailers)
-  after ?rcv_timeout -> error(didnt_get_grpc_trailers)
+  after ?rcv_timeout ->
+    dump_msgs(),
+    error(didnt_get_grpc_trailers)
   end.
 
 
@@ -236,7 +243,9 @@ assert_trailers(StreamRef, Trailers) ->
 assert_stream_killed(StreamRef) ->
   receive
     ?grpc_event_stream_killed(StreamRef) -> ok
-  after ?rcv_timeout -> error(didnt_get_stream_kill)
+  after ?rcv_timeout ->
+    dump_msgs(),
+    error(didnt_get_stream_kill)
   end.
 
 

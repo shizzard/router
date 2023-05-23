@@ -42,28 +42,46 @@
 -define(trailer_control_stream_noinit_message(_), <<"InitRq/ResumeRq must be handled within the control stream first">>).
 -define(trailer_control_stream_session_expired_message(_), <<"Session identified by provided id already expired">>).
 -define(trailer_control_stream_session_resume_failed_message(Reason), case Reason of
-  conn_alive -> <<"Session resume failed: original connection is still alive">>;
-  invalid_endpoint -> <<"Session resume failed: endpoint parameters do not match original ones">>
+  conn_alive -> <<"Session resume failed: original connection is still alive">>
 end).
 -define(trailer_fq_service_name_empty_message(_), <<"Fully qualified service name cannot be empty">>).
 -define(trailer_agent_id_empty_message(_), <<"Agent id cannot be empty">>).
--define(trailer_conflict_message(Fqsn, AgentId, AgentInstance),
-  iolist_to_binary(io_lib:format(
-    "Agent ~ts@~ts/~ts is already registered in the system and the conflict management policy is set to 'BLOCKING'",
-    [AgentId, Fqsn, AgentInstance]
-  ))
-).
 -define(trailer_service_invalid_message(Fqsn, Host, Port),
   iolist_to_binary(io_lib:format(
     "There is no registered service ~ts@~ts:~p",
     [Fqsn, Host, Port]
   ))
 ).
+-define(trailer_service_invalid_stateless(_), <<"Control stream cannot be initiated with stateless virtual service declaration">>).
 
 -define(control_stream_init_error_message_mismatched_virtual_service,
   <<"Existing registered virtual service significantly mismatches with the provided one">>).
+-define(control_stream_register_agent_error_conflict_blocking,
+  <<"Cannot register agent due to conflict management policy: blocking">>).
+-define(control_stream_generic_error_ise, <<"Internal Server Error">>).
 
--define(control_stream_init_error_message_mismatched_virtual_service_cmp, ?trailer_cmp_invalid).
--define(control_stream_init_error_message_mismatched_virtual_service_cmp_message(Cmp), ?trailer_cmp_invalid_message(Cmp)).
+-define(control_stream_init_error_meta_mismatched_virtual_service_cmp, ?trailer_cmp_invalid).
+-define(control_stream_init_error_meta_mismatched_virtual_service_cmp_message(Cmp), ?trailer_cmp_invalid_message(Cmp)).
+-define(control_stream_register_agent_error_meta_conflict_blocking, <<"conflict">>).
+-define(control_stream_register_agent_error_meta_conflict_blocking_message(Fqsn, AgentId, AgentInstance),
+  iolist_to_binary(io_lib:format(
+    "Agent ~ts@~ts/~ts is already registered in the system and the conflict management policy is set to 'BLOCKING'",
+    [AgentId, Fqsn, AgentInstance]
+  ))
+).
+-define(control_stream_register_agent_error_meta_ise, <<"internal_server_error">>).
+-define(control_stream_register_agent_error_meta_ise_message(Fqsn, AgentId, AgentInstance),
+  iolist_to_binary(io_lib:format(
+    "Internal Server Error occured while trying to register agent ~ts@~ts/~ts; check server error logs for more information",
+    [AgentId, Fqsn, AgentInstance]
+  ))
+).
+-define(control_stream_unregister_agent_error_meta_ise, <<"internal_server_error">>).
+-define(control_stream_unregister_agent_error_meta_ise_message(Fqsn, AgentId, AgentInstance),
+  iolist_to_binary(io_lib:format(
+    "Internal Server Error occured while trying to unregister agent ~ts@~ts/~ts; check server error logs for more information",
+    [AgentId, Fqsn, AgentInstance]
+  ))
+).
 
 -define(control_stream_conflict_event_reason_preemptive, <<"Force degeristration occured due to conflict management policy: preemptive">>).

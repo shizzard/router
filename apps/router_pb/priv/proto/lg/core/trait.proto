@@ -95,26 +95,32 @@ message Result {
     SUCCESS = 1;
 
     /*
-      Operation failed due to invalid argument.
-      Related information might be found in the error_metadata field.
+      Internal Server Error.
+      Related information might be found in the error_meta field.
     */
-    ERROR_INVALID_ARGUMENT = 2;
+    ERROR_ISE = 1;
+
+    /*
+      Operation failed due to invalid argument.
+      Related information might be found in the error_meta field.
+    */
+    ERROR_INVALID_ARGUMENT = 3;
 
     /*
       The operation failed because the endpoint was unreachable.
     */
-    ERROR_ENDPOINT_UNREACHABLE = 3;
+    ERROR_ENDPOINT_UNREACHABLE = 4;
 
     /*
       The operation failed due to an unknown virtual service. The client must
       register the virtual service before referencing it in subsequent messages.
     */
-    ERROR_UNKNOWN_VIRTUAL_SERVICE = 4;
+    ERROR_UNKNOWN_VIRTUAL_SERVICE = 5;
 
     /*
       The operation failed due to the conflict.
     */
-    ERROR_CONFLICT = 5;
+    ERROR_CONFLICT = 6;
   }
 
   /*

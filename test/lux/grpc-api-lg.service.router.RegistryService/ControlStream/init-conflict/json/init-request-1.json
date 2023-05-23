@@ -6,10 +6,11 @@
         "service": {
           "stateful": {
             "package": "lg.test.package",
-            "name": "StatefulServiceA",
+            "name": "StatefulService",
             "methods": [
               {"name": "MethodOne"}
-            ]
+            ],
+            "cmp": "BLOCKING"
           }
         },
         "endpoint": {

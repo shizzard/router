@@ -346,6 +346,16 @@ control_stream(#'lg.service.router.ControlStreamEvent'{
     ?trailer_id_empty => ?trailer_id_empty_message(undefined)
   }}, S0};
 
+%% Initial InitRq request: session id is undefined, handler pid is undefined, but the service is stateless
+control_stream(#'lg.service.router.ControlStreamEvent'{
+  event = {init_rq, #'lg.service.router.ControlStreamEvent.InitRq'{
+    virtual_service = #'lg.core.grpc.VirtualService'{service = {stateless, _VirtualService}}
+  }} = _Event
+} = _Pdu, #state{session_id = undefined, handler_pid = undefined} = S0) ->
+  {error, {grpc_error, ?grpc_code_invalid_argument, ?grpc_message_invalid_argument_payload, #{
+    ?trailer_service_invalid => ?trailer_service_invalid_stateless(undefined)
+  }}, S0};
+
 %% Initial InitRq request: session id is undefined, handler pid is undefined
 control_stream(#'lg.service.router.ControlStreamEvent'{
   id = IdRecord,
@@ -354,6 +364,8 @@ control_stream(#'lg.service.router.ControlStreamEvent'{
   case control_stream_event_handle(Event, S0) of
     {ok, {RetEvent, S1}} ->
       {ok, {reply, #'lg.service.router.ControlStreamEvent'{id = IdRecord, event = RetEvent}}, S1};
+    {ok, {fin, RetEvent, S1}} ->
+      {ok, {reply_fin, #'lg.service.router.ControlStreamEvent'{id = IdRecord, event = RetEvent}}, S1};
     {error, {Trailers, S1}} ->
       {error, {grpc_error, ?grpc_code_invalid_argument, ?grpc_message_invalid_argument_payload, Trailers}, S1}
   end;
@@ -366,6 +378,8 @@ control_stream(#'lg.service.router.ControlStreamEvent'{
   case control_stream_event_handle(Event, S0) of
     {ok, {RetEvent, S1}} ->
       {ok, {reply, #'lg.service.router.ControlStreamEvent'{id = IdRecord, event = RetEvent}}, S1};
+    {ok, {fin, RetEvent, S1}} ->
+      {ok, {reply_fin, #'lg.service.router.ControlStreamEvent'{id = IdRecord, event = RetEvent}}, S1};
     {error, {Trailers, S1}} ->
       {error, {grpc_error, ?grpc_code_invalid_argument, ?grpc_message_invalid_argument_payload, Trailers}, S1}
   end;
@@ -411,37 +425,6 @@ control_stream(#'lg.service.router.ControlStreamEvent'{
 %% Control stream handlers
 
 
-
-control_stream_event_handle({init_rq, #'lg.service.router.ControlStreamEvent.InitRq'{
-    virtual_service = #'lg.core.grpc.VirtualService'{
-      service = {stateless, #'lg.core.grpc.VirtualService.StatelessVirtualService'{
-        package = Package0,
-        name = Name0,
-        methods = Methods0
-      }},
-      maintenance_mode_enabled = MaintenanceMode0,
-      endpoint = #'lg.core.network.Endpoint'{host = Host0, port = Port0}
-    }
-  }},
-  #state{session_id = undefined, handler_pid = undefined} = S0
-) ->
-  {PackageErrors, Package} = validate_package(Package0),
-  {NameErrors, Name} = validate_name(Name0),
-  {MethodsErrors, Methods} = validate_methods(Methods0),
-  {MaintenanceModeErrors, MaintenanceMode} = validate_maintenance_mode(MaintenanceMode0),
-  {HostErrors, Host} = validate_host(Host0),
-  {PortErrors, Port} = validate_port(Port0),
-  ErrorList = lists:flatten([
-    PackageErrors, NameErrors, MethodsErrors, MaintenanceModeErrors, HostErrors, PortErrors
-  ]),
-  case ErrorList of
-    [] ->
-      control_stream_event_handle_register_service(
-        stateless, Package, Name, Methods, undefined, MaintenanceMode, Host, Port, S0
-      );
-    _ ->
-      {error, {maps:from_list(ErrorList), S0}}
-  end;
 
 control_stream_event_handle({init_rq, #'lg.service.router.ControlStreamEvent.InitRq'{
     virtual_service = #'lg.core.grpc.VirtualService'{
@@ -511,6 +494,21 @@ control_stream_event_handle({register_agent_rq, #'lg.service.router.ControlStrea
     [] ->
       control_stream_event_handle_register_agent(AgentId, AgentInstance, S0);
     _ -> {error, {maps:from_list(ErrorList), S0}}
+  end;
+
+control_stream_event_handle({unregister_agent_rq, #'lg.service.router.ControlStreamEvent.UnregisterAgentRq'{
+    agent_id = AgentId0,
+    agent_instance = AgentInstance0
+  }},
+  S0
+) ->
+  {AgentIdErrors, AgentId} = validate_agent_id(AgentId0),
+  {AgentInstanceErrors, AgentInstance} = validate_agent_instance(AgentInstance0),
+  ErrorList = lists:flatten([AgentIdErrors, AgentInstanceErrors]),
+  case ErrorList of
+    [] ->
+      control_stream_event_handle_unregister_agent(AgentId, AgentInstance, S0);
+    _ -> {error, {maps:from_list(ErrorList), S0}}
   end.
 
 
@@ -529,8 +527,8 @@ control_stream_event_handle_register_service(Type, Package, Name, Methods, Cmp, 
             error_meta = lists:flatten([case Field of
               cmp ->
                 {
-                  ?control_stream_init_error_message_mismatched_virtual_service_cmp,
-                  ?control_stream_init_error_message_mismatched_virtual_service_cmp_message(Cmp)
+                  ?control_stream_init_error_meta_mismatched_virtual_service_cmp,
+                  ?control_stream_init_error_meta_mismatched_virtual_service_cmp_message(Cmp)
                 };
               _ -> []
             end || Field <- InvalidFields])
@@ -555,6 +553,7 @@ control_stream_event_handle_start_session(S0) ->
   }}.
 
 
+
 control_stream_event_handle_session_resume(HPid, SessionId, S0) ->
   case router_grpc_stream_sup:recover_handler(HPid, SessionId) of
     ok ->
@@ -573,6 +572,10 @@ control_stream_event_handle_session_resume(HPid, SessionId, S0) ->
 
 
 
+control_stream_event_handle_register_agent(AgentId, <<>>, S0) ->
+  AgentInstance = list_to_binary(uuid:uuid_to_string(uuid:get_v4_urandom())),
+  control_stream_event_handle_register_agent(AgentId, AgentInstance, S0);
+
 control_stream_event_handle_register_agent(AgentId, AgentInstance, #state{
   definition_external = Definition, handler_pid = HPid
 } = S0) ->
@@ -589,15 +592,70 @@ control_stream_event_handle_register_agent(AgentId, AgentInstance, #state{
         S0
       }};
     {error, conflict} ->
-      {error, {#{
-        ?trailer_conflict => ?trailer_conflict_message(
-          Definition#router_grpc_service_registry_definition_external.fq_service_name, AgentId, AgentInstance
-        )
-      }, S0}};
-    {error, {invalid_service, Fqsn, Host, Port}} ->
-      {error, {#{
-        ?trailer_service_invalid => ?trailer_service_invalid_message(Fqsn, Host, Port)
-      }, S0}}
+      {ok, {
+        {register_agent_rs, #'lg.service.router.ControlStreamEvent.RegisterAgentRs'{
+          result = #'lg.core.trait.Result'{
+            status = 'ERROR_CONFLICT',
+            error_message = ?control_stream_register_agent_error_conflict_blocking,
+            error_meta = [{
+              ?control_stream_register_agent_error_meta_conflict_blocking,
+              ?control_stream_register_agent_error_meta_conflict_blocking_message(
+                Definition#router_grpc_service_registry_definition_external.fq_service_name, AgentId, AgentInstance
+              )
+            }]
+          }
+        }},
+        S0
+      }};
+    {error, internal_error} ->
+      {ok, {
+        {register_agent_rs, #'lg.service.router.ControlStreamEvent.RegisterAgentRs'{
+          result = #'lg.core.trait.Result'{
+            status = 'ERROR_ISE',
+            error_message = ?control_stream_generic_error_ise,
+            error_meta = [{
+              ?control_stream_register_agent_error_meta_ise,
+              ?control_stream_register_agent_error_meta_ise_message(
+                Definition#router_grpc_service_registry_definition_external.fq_service_name, AgentId, AgentInstance
+              )
+            }]
+          }
+        }},
+        S0
+      }}
+  end.
+
+
+
+control_stream_event_handle_unregister_agent(AgentId, AgentInstance, #state{
+  definition_external = Definition, handler_pid = HPid
+} = S0) ->
+  case router_grpc_stream_h:unregister_agent(
+    HPid, Definition#router_grpc_service_registry_definition_external.fq_service_name, AgentId, AgentInstance
+  ) of
+    {ok, {_AgentId_, _AgentInstance_}} ->
+      {ok, {
+        {unregister_agent_rs, #'lg.service.router.ControlStreamEvent.UnregisterAgentRs'{
+          result = #'lg.core.trait.Result'{status = 'SUCCESS'}
+        }},
+        S0
+      }};
+    {error, internal_error} ->
+      {ok, {
+        {unregister_agent_rs, #'lg.service.router.ControlStreamEvent.UnregisterAgentRs'{
+          result = #'lg.core.trait.Result'{
+            status = 'ERROR_ISE',
+            error_message = ?control_stream_generic_error_ise,
+            error_meta = [{
+              ?control_stream_unregister_agent_error_meta_ise,
+              ?control_stream_unregister_agent_error_meta_ise_message(
+                Definition#router_grpc_service_registry_definition_external.fq_service_name, AgentId, AgentInstance
+              )
+            }]
+          }
+        }},
+        S0
+      }}
   end.
 
 

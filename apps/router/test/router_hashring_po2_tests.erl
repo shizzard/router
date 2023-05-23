@@ -61,3 +61,28 @@ can_generate_child_specs_with_idfun_test() ->
       ?assertEqual(floor(math:pow(2, BucketsPO2 - NodesPO2)), length(Buckets))
   end, ChildSpecs),
   ok.
+
+-spec ?eunit_test(can_map_arbitrary_term_to_node_bucket_pair_test).
+can_map_arbitrary_term_to_node_bucket_pair_test() ->
+  BucketsPO2 = 4,
+  NodesPO2 = 2,
+  {ok, HR} = router_hashring_po2:new(BucketsPO2, NodesPO2),
+  ChildSpec = #{id => fake_id, start => {module, function, [a,r,g,s]}},
+  ChildSpecs = router_hashring_po2:child_specs(HR, ChildSpec, #{id_fun => fun(Node) -> {fake_id, Node} end}),
+  lists:foreach(fun(AgentInstance) ->
+    {Node, Bucket} = router_hashring_po2:map(HR, {<<"lg.test.package.StatefulService">>, <<"agent-1">>, AgentInstance}),
+    %% Exactly one child spec contains node-bucket pair
+    {Node, Bucket, MatchedNodesN} = lists:foldl(fun
+      (#{
+        id := {fake_id, TargetNode},
+        start := {module, function, [a,r,g,s, #{node := TargetNode, buckets := TargetBuckets}, {fake_id, TargetNode}]}
+      }, {TargetNode, TargetBucket, N} = Acc) ->
+        case lists:member(TargetBucket, TargetBuckets) of
+          true -> {TargetNode, TargetBucket, N + 1};
+          false -> Acc
+        end;
+      (_, Acc) -> Acc
+    end, {Node, Bucket, 0}, ChildSpecs),
+    ?assertEqual(1, MatchedNodesN)
+  end, [list_to_binary(uuid:uuid_to_string(uuid:get_v4_urandom())) || _ <- lists:seq(1,100)]),
+  ok.

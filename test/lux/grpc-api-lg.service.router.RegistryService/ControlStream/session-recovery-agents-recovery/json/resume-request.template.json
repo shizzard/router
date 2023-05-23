@@ -1,0 +1,8 @@
+{
+  "id": {"tag": "resume-1"},
+  "event": {
+    "resume_rq": {
+      "session_id": "%PLACEHOLDER%"
+    }
+  }
+}

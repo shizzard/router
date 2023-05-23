@@ -4,8 +4,8 @@
 -include("router_grpc_service_registry.hrl").
 -include_lib("router_log/include/router_log.hrl").
 
+-export([push_data/2]).
 -export([init/3, data/4, info/3, terminate/3, early_error/5]).
--export([push_data/3]).
 
 -record(state, {
   stream_id :: cowboy_stream:streamid() | undefined,
@@ -26,6 +26,14 @@
 -type grpc_message() :: unicode:unicode_binary().
 
 -export_type([grpc_code/0, grpc_message/0]).
+
+
+
+%% Messages
+
+
+
+-define(msg_push_data(Pdu), {msg_push_data, Pdu}).
 
 
 
@@ -58,6 +66,17 @@
 
 
 %% Interface
+
+
+
+-spec push_data(
+  Pdu :: term(),
+  Req :: cowboy_req:req()
+) ->
+  typr:generic_return(ErrorRet :: term()).
+
+push_data(Pdu, Req) ->
+  cowboy_req:cast(?msg_push_data(Pdu), Req).
 
 
 
@@ -142,6 +161,16 @@ data(StreamId, Fin, Data, #state{definition = Details, data_buffer = Buffer} = S
     State :: state()
   }.
 
+info(StreamId, ?msg_push_data(Pdu), S0) ->
+  case router_grpc:pack_data(Pdu, S0#state.definition) of
+    {ok, Data} -> data_commands(Data, S0);
+    {error, Reason} -> ?l_error(#{
+      text => "Failed to pack pushed data", what => info, details => #{
+        stream_id => StreamId, pdu => Pdu, reason => Reason
+      }
+    })
+  end;
+
 info(StreamId, Info, S0) ->
   ?l_debug(#{text => "INFO", what => info, details => #{stream_id => StreamId, info => Info}}),
   {[], S0}.
@@ -175,22 +204,6 @@ early_error(StreamId, Reason, PartialReq, Resp, Opts) ->
     stream_id => StreamId, reason => Reason, partial_req => PartialReq, resp => Resp, opts => Opts
   }}),
   Resp.
-
-
-
--spec push_data(
-  Pdu :: term(),
-  Definition :: router_grpc:definition(),
-  Req :: cowboy_req:req()
-) ->
-  typr:generic_return(ErrorRet :: term()).
-
-push_data(Pdu, Definition, Req) ->
-  case router_grpc:pack_data(Pdu, Definition) of
-    {ok, Data} ->
-      cowboy_req:stream_body(Data, nofin, Req);
-    {error, Reason} -> {error, Reason}
-  end.
 
 
 

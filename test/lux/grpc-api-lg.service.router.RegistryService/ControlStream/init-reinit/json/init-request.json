@@ -1,0 +1,22 @@
+{
+  "id": {"tag": "init-1"},
+  "event": {
+    "init_rq": {
+      "virtual_service": {
+        "service": {
+          "stateful": {
+            "package": "lg.test.package",
+            "name": "StatefulService",
+            "methods": [
+              {"name": "MethodOne"}
+            ]
+          }
+        },
+        "endpoint": {
+          "host": "test.lg",
+          "port": 8137
+        }
+      }
+    }
+  }
+}

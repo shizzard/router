@@ -1,0 +1,9 @@
+{
+  "id": {"tag": "register-agent-2"},
+  "event": {
+    "register_agent_rq": {
+      "agent_id": "agent-1",
+      "agent_instance": "agent-1"
+    }
+  }
+}

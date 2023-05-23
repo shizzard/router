@@ -4,12 +4,13 @@
     "init_rq": {
       "virtual_service": {
         "service": {
-          "stateless": {
+          "stateful": {
             "package": "lg.test.package",
-            "name": "StatelessServiceA",
+            "name": "StatefulService",
             "methods": [
               {"name": "MethodOne"}
-            ]
+            ],
+            "cmp": "BLOCKING"
           }
         },
         "endpoint": {

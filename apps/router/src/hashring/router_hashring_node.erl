@@ -153,6 +153,11 @@ handle_call(?msg_register_agent(StreamPid, Bucket, Definition, AgentId, AgentIns
     #{Bucket := Ets} ->
       handle_call_register_agent(Ets, StreamPid, Bucket, Definition, AgentId, AgentInstance, ConflictFun, S0);
     _ ->
+      ?l_error(#{
+        text => "Failed to register agent: invalid bucket", what => handle_call, details => #{
+          bucket => Bucket, node => S0#state.id, actual_buckets => S0#state.buckets
+        }
+      }),
       {reply, {error, invalid_bucket}, S0}
   end;
 

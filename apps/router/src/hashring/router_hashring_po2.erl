@@ -88,12 +88,12 @@ child_specs(#?MODULE{hr_buckets_po2 = BucketsPO2, hr_nodes_po2 = NodesPO2}, Chil
     [
       child_spec(
         Node,
-        lists:reverse([Node * BucketsPerNode - BucketN || BucketN <- lists:seq(0, BucketsPerNode - 1)]),
+        lists:reverse([Node * BucketsPerNode + BucketN || BucketN <- lists:seq(0, BucketsPerNode - 1)]),
         ChildSpec,
         Opts
       ) | Acc
     ]
-  end, [], lists:seq(1, TotalNodes))).
+  end, [], lists:seq(0, TotalNodes - 1))).
 
 
 
