@@ -22,7 +22,7 @@
 
 
 -spec decode(Type :: atom(), Filename :: list()) ->
-  type:generic_return(
+  typr:generic_return(
     OkRet :: term(),
     ErrorRet :: binary()
   ).
@@ -40,7 +40,7 @@ decode(Type, Filename) ->
   N :: integer(),
   OutSuffix :: list()
 ) ->
-  type:generic_return(
+  typr:generic_return(
     OkRet :: list(),
     ErrorRet :: binary()
   ).
@@ -58,7 +58,7 @@ encode_headers(Status, Headers, Dir, Prefix, N, OutSuffix) ->
   N :: integer(),
   Suffix :: list()
 ) ->
-  type:generic_return(
+  typr:generic_return(
     OkRet :: list(),
     ErrorRet :: binary()
   ).
@@ -75,7 +75,7 @@ encode_data(Type, Data, Dir, Prefix, N, Suffix) ->
   N :: integer(),
   OutSuffix :: list()
 ) ->
-  type:generic_return(
+  typr:generic_return(
     OkRet :: list(),
     ErrorRet :: binary()
   ).

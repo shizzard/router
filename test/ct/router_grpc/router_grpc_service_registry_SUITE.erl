@@ -36,8 +36,8 @@ groups() -> [
 ].
 
 init_per_suite(Config) ->
-  ct:pal("~p", [application:which_applications()]),
   ok = application:set_env(router_grpc, listener, [{port, ?port}], [{persistent, true}]),
+  ok = application:set_env(router_grpc, client, [{pool_size, 10}], [{persistent, true}]),
   ok = application:set_env(router_grpc, session, [{inactivity_limit_ms, 15000}], [{persistent, true}]),
   ok = application:set_env(router, hashring, [{buckets_po2, 2}, {nodes_po2, 1}], [{persistent, true}]),
   {ok, _} = application:ensure_all_started(router_grpc),

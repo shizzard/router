@@ -9,7 +9,7 @@
   hr_nodes_po2 :: hr_nodes_po2()
 }).
 
--type hash_algorithm() :: crypto:hash_algorithm().
+-type hash_algorithm() :: atom(). % crypto:hash_algorithm().
 -type hr_bitsize() :: pos_integer().
 -type hr_buckets_po2() :: pos_integer().
 -type hr_nodes_po2() :: pos_integer().

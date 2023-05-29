@@ -128,7 +128,7 @@ unregister_agent(Pid, Fqsn, AgentId, AgentInstance) ->
   AgentId :: router_grpc:agent_id(),
   AgentInstance :: router_grpc:agent_instance()
 ) ->
-  type:ok_return().
+  typr:ok_return().
 
 conflict(StreamPid, Fqsn, AgentId, AgentInstance) ->
   gen_server:cast(StreamPid, ?msg_conflict(Fqsn, AgentId, AgentInstance)).

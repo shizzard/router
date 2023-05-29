@@ -96,7 +96,7 @@ init(StreamId, #{
   path := Path,
   headers := #{?http2_header_content_type := <<"application/grpc", _Rest/binary>>}
 } = Req, _Opts) ->
-  router_log:component(router_grpc),
+  router_log:component(router_grpc_h),
   case router_grpc_service_registry:lookup_fqmn(Path) of
     {ok, [#router_grpc_service_registry_definition_internal{module = Module} = Definition]} ->
       ?l_debug(#{text => "Internal gRPC request", what => init, details => #{
@@ -129,10 +129,10 @@ init(_StreamId, _Req, _Opts) ->
     State :: state()
   }.
 
-data(StreamId, Fin, Data, #state{definition = Details, data_buffer = Buffer} = S0) ->
+data(StreamId, Fin, Data, #state{definition = Definition, data_buffer = Buffer} = S0) ->
   IsFin = ?fin_to_bool(Fin),
   S1 = S0#state{stream_id = StreamId, is_client_fin = IsFin},
-  case router_grpc:unpack_data(<<Buffer/binary, Data/binary>>, Details) of
+  case router_grpc:unpack_data(<<Buffer/binary, Data/binary>>, Definition) of
     {ok, {Pdu, Rest}} ->
       handle_grpc_pdu(Pdu, S1#state{data_buffer = Rest});
     {more, Data} ->

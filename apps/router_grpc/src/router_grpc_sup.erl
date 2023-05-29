@@ -36,6 +36,13 @@ init([]) ->
   SupFlags = #{strategy => one_for_one, intensity => 10, period => 10},
   Children = [
     #{
+      id => router_grpc_client_pool_master_sup,
+      start => {router_grpc_client_pool_master_sup, start_link, []},
+      restart => permanent,
+      shutdown => 5000,
+      type => supervisor
+    },
+    #{
       id => router_grpc_service_registry,
       start => {router_grpc_service_registry, start_link, [
         [registry_definitions],
@@ -81,7 +88,7 @@ start_cowboy(Port) ->
 
 
 -spec stop_cowboy() ->
-  type:generic_return(ErrorRet :: not_found).
+  typr:generic_return(ErrorRet :: not_found).
 
 stop_cowboy() ->
   cowboy:stop_listener(router_grpc_listener).

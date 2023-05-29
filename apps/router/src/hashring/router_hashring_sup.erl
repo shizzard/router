@@ -13,8 +13,8 @@
 
 
 -spec start_link({
-  BucketsPO2 :: router_hasring_po2:hr_buckets_po2(),
-  NodesPO2 :: router_hasring_po2:hr_nodes_po2()
+  BucketsPO2 :: router_hashring_po2:hr_buckets_po2(),
+  NodesPO2 :: router_hashring_po2:hr_nodes_po2()
 }) ->
   typr:generic_return(
     OkRet :: pid(),

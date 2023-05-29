@@ -18,17 +18,15 @@
   DefinitionExternal :: router_grpc:definition_external(),
   ConnReq :: cowboy_req:req()
 ) ->
-  type:ok_return(OkRet :: pid()).
+  typr:ok_return(OkRet :: pid()).
 
 start_handler(SessionId, DefinitionInternal, DefinitionExternal, ConnReq) ->
   supervisor:start_child(?MODULE, [SessionId, DefinitionInternal, DefinitionExternal, ConnReq, self()]).
 
 
 
--spec lookup_handler(
-  SessionId :: router_grpc_stream_h:session_id()
-) ->
-  type:ok_return(OkRet :: pid(), ErrorRet :: undefined).
+-spec lookup_handler(SessionId :: router_grpc_stream_h:session_id()) ->
+  typr:generic_return(OkRet :: pid(), ErrorRet :: undefined).
 
 lookup_handler(SessionId) ->
   case router_grpc_stream_h:lookup(SessionId) of
@@ -42,7 +40,7 @@ lookup_handler(SessionId) ->
   Pid :: pid(),
   SessionId :: router_grpc_stream_h:session_id()
 ) ->
-  type:ok_return(OkRet :: pid()).
+  typr:generic_return(ErrorRet :: conn_alive).
 
 recover_handler(Pid, SessionId) ->
   router_grpc_stream_h:recover(Pid, SessionId, self()).
@@ -61,7 +59,7 @@ start_link() ->
 
 
 init([]) ->
-  router_log:component(router_grpc),
+  router_log:component(router_grpc_stream),
 
   ok = init_prometheus_metrics(),
 

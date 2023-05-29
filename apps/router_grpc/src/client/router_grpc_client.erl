@@ -3,9 +3,10 @@
 
 -include_lib("router_grpc/include/router_grpc.hrl").
 -include_lib("router_grpc/include/router_grpc_client.hrl").
+-include("router_grpc_service_registry.hrl").
 
 -export([is_ready/1, await_ready/2, grpc_request/5, grpc_data/3, grpc_terminate/2]).
--export([start_link/2, init/1, callback_mode/0, handle_event/4]).
+-export([start_link/1, start_link/2, init/1, callback_mode/0, handle_event/4]).
 
 -record(caller, {
   pid :: pid(),
@@ -169,12 +170,28 @@ grpc_terminate(Pid, StreamRef) ->
   typr:ok_return(OkRet :: pid()).
 
 start_link(Host, Port) ->
-  gen_statem:start_link({local, ?MODULE}, ?MODULE, [Host, Port], []).
+  gen_statem:start_link(?MODULE, [Host, Port], []).
+
+
+
+-spec start_link(
+  Definition :: router_grpc:definition_external()
+) ->
+  typr:ok_return(OkRet :: pid()).
+
+start_link(Definition) ->
+  gen_statem:start_link(?MODULE, [Definition], []).
 
 
 
 -spec init([term()]) ->
   {ok, FsmState :: fsm_state(), S0 :: state(), Action :: gen_statem:action()}.
+
+init([Definition]) ->
+  {ok, ?fsm_state_on_init(), #state{
+    host = erlang:binary_to_list(Definition#router_grpc_service_registry_definition_external.host),
+    port = Definition#router_grpc_service_registry_definition_external.port
+  }, {next_event, state_timeout, ?msg_gun_connect()}};
 
 init([Host, Port]) ->
   {ok, ?fsm_state_on_init(), #state{

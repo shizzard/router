@@ -1,0 +1,19 @@
+syntax = "proto3";
+package lg.service.example;
+
+message HashRq {
+  string payload = 1;
+}
+message HashRs {
+  string hash_value = 1;
+}
+
+message RandomRq {}
+message RandomRs {
+  string random_value = 1;
+}
+
+service StatelessVirtualService {
+  rpc Hash(HashRq) returns (HashRs);
+  rpc Random(RandomRq) returns (RandomRs);
+}

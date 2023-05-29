@@ -10,13 +10,13 @@
 -type arg_value() :: atom() | binary() | boolean() | float() | integer() | string().
 -type arg_spec() :: arg_type() | {arg_type(), arg_value()} | undefined.
 %% Example: {host, $h, "host", {string, "localhost"}, "Database server host"}
--type getopt_config() :: [{
+-type getopt_config() :: {
     Name :: atom(),
     Short :: char() | undefined,
     Long :: string() | undefined,
     ArgSpec :: arg_spec(),
     Help :: string() | undefined
-  }].
+  }.
 
 -export_type([getopt_config/0]).
 

@@ -306,6 +306,7 @@ handle_call(?call_register(Type, Package, ServiceName, Methods, Cmp, Maintenance
       %% Inserting very first FQSN
       ets:insert(S0#state.table_registry, RegistryDefinition),
       [ets:insert(S0#state.table_lookup, #lookup_index{fqmn = Fqmn, registry_keys = [RegistryId]}) || Fqmn <- Fqmns],
+      ok = maybe_start_pool(RegistryDefinition),
       if
         Maintenance -> set_maintenance(ServiceName, Host, Port, Maintenance);
         true -> ok
@@ -322,6 +323,7 @@ handle_call(?call_register(Type, Package, ServiceName, Methods, Cmp, Maintenance
               fqmn = Fqmn, registry_keys = lists:uniq([RegistryId | LookupIndex#lookup_index.registry_keys])
             })
           end || Fqmn <- Fqmns],
+          ok = maybe_start_pool(RegistryDefinition),
           if
             Maintenance -> set_maintenance(ServiceName, Host, Port, Maintenance);
             true -> ok
@@ -579,3 +581,11 @@ compare_definitions(
 ) -> {ok, match};
 
 compare_definitions(_, _) -> {error, [cmp]}.
+
+
+
+maybe_start_pool(Definition) ->
+  case router_grpc_client_pool_master_sup:start_pool(Definition) of
+    {ok, _Pid} -> ok;
+    {error, already_started} -> ok
+  end.

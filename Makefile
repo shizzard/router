@@ -11,8 +11,6 @@ SHELL := bash
 
 ERLC := $(shell which erlc)
 DOCKER := $(shell which docker)
-PYTHON3 := $(shell which python3)
-PIP3 := $(shell which pip3)
 
 ROUTER_DIR_ROOT := $(abspath ./)
 ROUTER_DIR_APPS := $(ROUTER_DIR_ROOT)/apps
@@ -145,8 +143,7 @@ ROUTER_DIR_TESTS_CT := $(ROUTER_DIR_TESTS)/ct
 ROUTER_DIR_TESTS_CT_LOGS := $(ROUTER_DIR_TESTS_CT)/_logs
 common-tests:
 	@echo ":: CT RUN"
-	$(call print_app_env)
-	$(REBAR) as test ct -v -c --verbosity 100 --logdir $(ROUTER_DIR_TESTS_CT_LOGS)
+	$(REBAR) as test ct --logdir $(ROUTER_DIR_TESTS_CT_LOGS) $(COMMON_TEST_OPTS)
 	@echo ":: CT END"
 
 .PHONY: lux-tests

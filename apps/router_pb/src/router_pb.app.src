@@ -2,6 +2,6 @@
   {description, "Router protobuf source and generated files"},
   {vsn, "0.1.0"},
   {registered, []},
-  {applications, [kernel, stdlib, grpcbox]},
+  {applications, [kernel, stdlib]},
   {env,[]}
 ]}.

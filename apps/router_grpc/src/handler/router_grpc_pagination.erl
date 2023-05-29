@@ -4,6 +4,9 @@
 
 -define(magic_string, 16#a11600d:4/integer-unit:8).
 
+-type page_token() :: term().
+-export_type([page_token/0]).
+
 
 
 %% Interface
