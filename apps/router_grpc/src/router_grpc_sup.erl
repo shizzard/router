@@ -46,15 +46,22 @@ init([]) ->
       id => router_grpc_service_registry,
       start => {router_grpc_service_registry, start_link, [
         [registry_definitions],
-        #{'lg.service.router.RegistryService' => router_grpc_h_registry}
+        #{'lg.service.router.RegistryService' => router_grpc_internal_registry}
       ]},
       restart => permanent,
       shutdown => 5000,
       type => worker
     },
     #{
-      id => router_grpc_stream_sup,
-      start => {router_grpc_stream_sup, start_link, []},
+      id => router_grpc_internal_stream_sup,
+      start => {router_grpc_internal_stream_sup, start_link, []},
+      restart => permanent,
+      shutdown => infinity,
+      type => supervisor
+    },
+    #{
+      id => router_grpc_external_stream_sup,
+      start => {router_grpc_external_stream_sup, start_link, []},
       restart => permanent,
       shutdown => infinity,
       type => supervisor

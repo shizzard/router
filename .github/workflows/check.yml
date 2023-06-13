@@ -6,17 +6,42 @@ permissions:
   contents: read
 
 jobs:
-
-  check:
+  build:
     strategy:
       matrix:
         version: [25]
-    runs-on: ubuntu-latest
+    runs-on: [ubuntu-latest]
 
     container:
       image: erlang:${{ matrix.version }}
 
     steps:
+    - name: Checkout
+      uses: actions/checkout@v3
+
+    ## print env variables
+    - name: Print ENV
+      run: printenv
+
+    ## build
+    - name: Build
+      run: make
+
+
+  check:
+    needs: build
+    strategy:
+      matrix:
+        version: [25]
+    runs-on: [ubuntu-latest]
+
+    container:
+      image: erlang:${{ matrix.version }}
+
+    steps:
+    - name: Setup Python 3 venv
+      run: apt update && apt install -y python3-venv
+
     - name: Checkout
       uses: actions/checkout@v3
 
@@ -33,6 +58,12 @@ jobs:
       with:
         path: _tools/lux
         key: ${{ runner.os }}-test-tools-lux-${{ hashFiles('_tools/.lux_version') }}
+    - name: Cache test tools (evans)
+      id: test-tools-evans
+      uses: actions/cache@v3
+      with:
+        path: _tools/evans/evans
+        key: ${{ runner.os }}-test-tools-evans-${{ hashFiles('_tools/.evans_version') }}
     - name: Cache test plt
       uses: actions/cache@v3
       id: test-plt
@@ -40,7 +71,7 @@ jobs:
         path: .plt
         key: ${{ runner.os }}-test-plt-${{ hashFiles('rebar.lock') }}
 
-    ## dialyzer run
+    ## print env variables
     - name: Print ENV
       run: printenv
 

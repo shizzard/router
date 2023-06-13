@@ -1,0 +1,18 @@
+{
+  "virtual_service": {
+    "service": {
+      "stateless": {
+        "package": "lg.service.example",
+        "name": "StatelessVirtualService",
+        "methods": [
+          {"name": "Echo"},
+          {"name": "Random"}
+        ]
+      }
+    },
+    "endpoint": {
+      "host": "localhost",
+      "port": 8138
+    }
+  }
+}

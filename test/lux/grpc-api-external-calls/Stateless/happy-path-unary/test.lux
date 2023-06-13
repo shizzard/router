@@ -1,0 +1,27 @@
+[doc]
+Check if router handles external unary calls.
+[enddoc]
+
+[include ${ROUTER_DIR_TESTS_LUX}/__common/capture.luxinc]
+[include ${ROUTER_DIR_TESTS_LUX}/__tools/stateless-service.luxinc]
+
+[global request-file-register=json/register-request.json]
+[global request-file-echo=json/echo-request.json]
+[global response-file-echo=json/echo-request.response.json]
+
+[shell router]
+  [invoke app-start]
+
+[shell stateless-service]
+  [invoke stateless-service-start]
+
+[shell stateless-service-register]
+  [invoke stateless-service-declare ${request-file-register}]
+
+[shell evans]
+  [invoke grpc-request ${stateless-service-method-echo} ${request-file-echo} ${response-file-echo}]
+  [progress (check response)]
+  [invoke jq-check-file-match ${response-file-echo} .status.number 0]
+  [invoke jq-check-file-match ${response-file-echo} .messages[0].tag lg.service.example.StatelessVirtualService.Echo]
+
+[cleanup]

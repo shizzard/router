@@ -5,7 +5,7 @@
 -include_lib("typr/include/typr_specs_gen_server.hrl").
 -include_lib("router_grpc/include/router_grpc_service_registry.hrl").
 
--export([register_agent/6, unregister_agent/5, lookup_agent/5]).
+-export([register_agent/4, unregister_agent/3, lookup_agent/3, lookup_agent/2]).
 -export([
   start_link/2, init/1,
   handle_call/3, handle_cast/2, handle_info/2,
@@ -31,13 +31,14 @@
     AgentInstance :: router_grpc:agent_instance()
   ),
   stream_h_pid :: pid(),
-  conflict_fun :: router_grpc_stream_h:conflict_fun(),
+  conflict_fun :: router_grpc_internal_stream_h:conflict_fun(),
   monitor_ref :: reference(),
   service_definition :: router_grpc:definition_external(),
   agent_id :: router_grpc:agent_id(),
   agent_instance :: router_grpc:agent_instance()
 }).
 
+-define(agent_hashring_key(Fqsn, AgentId), {agent_hashring_key, Fqsn, AgentId}).
 -define(gproc_key(Node), {?MODULE, Node}).
 -define(stream_down_monitor_tag(Bucket, AgentRecordId), {stream_down_monitor_tag, Bucket, AgentRecordId}).
 
@@ -53,6 +54,8 @@
   {msg_unregister_agent, Bucket, Fqsn, AgentId, AgentInstance}).
 -define(msg_lookup_agent(Bucket, Fqsn, AgentId, AgentInstance),
   {msg_lookup_agent, Bucket, Fqsn, AgentId, AgentInstance}).
+-define(msg_lookup_agent(Bucket, Fqsn, AgentId),
+  {msg_lookup_agent, Bucket, Fqsn, AgentId}).
 
 
 
@@ -65,25 +68,22 @@
 
 
 -spec register_agent(
-  Node :: router_hashring_po2:hr_node(),
-  Bucket :: router_hashring_po2:hr_bucket(),
   Definition :: router_grpc:definition_external(),
   AgentId :: router_grpc:agent_id(),
   AgentInstance :: router_grpc:agent_instance(),
-  ConflictFun :: router_grpc_stream_h:conflict_fun()
+  ConflictFun :: router_grpc_internal_stream_h:conflict_fun()
 ) ->
   typr:generic_return(
     ErrorRet :: invalid_node | invalid_bucket | conflict
   ).
 
-register_agent(Node, Bucket, Definition, AgentId, AgentInstance, ConflictFun) ->
+register_agent(Definition, AgentId, AgentInstance, ConflictFun) ->
+  {Node, Bucket} = map(Definition#router_grpc_service_registry_definition_external.fq_service_name, AgentId),
   maybe_call_node(Node, ?msg_register_agent(self(), Bucket, Definition, AgentId, AgentInstance, ConflictFun)).
 
 
 
 -spec unregister_agent(
-  Node :: router_hashring_po2:hr_node(),
-  Bucket :: router_hashring_po2:hr_bucket(),
   Fqsn :: router_grpc:fq_service_name(),
   AgentId :: router_grpc:agent_id(),
   AgentInstance :: router_grpc:agent_instance()
@@ -92,14 +92,13 @@ register_agent(Node, Bucket, Definition, AgentId, AgentInstance, ConflictFun) ->
     ErrorRet :: invalid_node | invalid_bucket
   ).
 
-unregister_agent(Node, Bucket, Fqsn, AgentId, AgentInstance) ->
+unregister_agent(Fqsn, AgentId, AgentInstance) ->
+  {Node, Bucket} = map(Fqsn, AgentId),
   maybe_call_node(Node, ?msg_unregister_agent(Bucket, Fqsn, AgentId, AgentInstance)).
 
 
 
 -spec lookup_agent(
-  Node :: router_hashring_po2:hr_node(),
-  Bucket :: router_hashring_po2:hr_bucket(),
   Fqsn :: router_grpc:fq_service_name(),
   AgentId :: router_grpc:agent_id(),
   AgentInstance :: router_grpc:agent_instance()
@@ -109,8 +108,24 @@ unregister_agent(Node, Bucket, Fqsn, AgentId, AgentInstance) ->
     ErrorRet :: invalid_node | invalid_bucket | undefined
   ).
 
-lookup_agent(Node, Bucket, Fqsn, AgentId, AgentInstance) ->
+lookup_agent(Fqsn, AgentId, AgentInstance) ->
+  {Node, Bucket} = map(Fqsn, AgentId),
   maybe_call_node(Node, ?msg_lookup_agent(Bucket, Fqsn, AgentId, AgentInstance)).
+
+
+
+-spec lookup_agent(
+  Fqsn :: router_grpc:fq_service_name(),
+  AgentId :: router_grpc:agent_id()
+) ->
+  typr:generic_return(
+    OkRet :: [{router_grpc:agent_instance(), router_grpc:definition_external()}],
+    ErrorRet :: invalid_node | invalid_bucket | undefined
+  ).
+
+lookup_agent(Fqsn, AgentId) ->
+  {Node, Bucket} = map(Fqsn, AgentId),
+  maybe_call_node(Node, ?msg_lookup_agent(Bucket, Fqsn, AgentId)).
 
 
 
@@ -177,6 +192,16 @@ handle_call(?msg_lookup_agent(Bucket, Fqsn, AgentId, AgentInstance), _GenReplyTo
   case BucketEts of
     #{Bucket := Ets} ->
       handle_call_lookup_agent(Ets, Fqsn, AgentId, AgentInstance, S0);
+    _ ->
+      {reply, {error, invalid_bucket}, S0}
+  end;
+
+handle_call(?msg_lookup_agent(Bucket, Fqsn, AgentId), _GenReplyTo, #state{
+  bucket_ets = BucketEts
+} = S0) ->
+  case BucketEts of
+    #{Bucket := Ets} ->
+      handle_call_lookup_agent(Ets, Fqsn, AgentId, S0);
     _ ->
       {reply, {error, invalid_bucket}, S0}
   end;
@@ -322,3 +347,44 @@ handle_call_lookup_agent(Ets, Fqsn, AgentId, AgentInstance, S0) ->
     [#agent_record{service_definition = Definition}] ->
       {reply, {ok, Definition}, S0}
   end.
+
+
+
+handle_call_lookup_agent(Ets, Fqsn, AgentId, S0) ->
+  case ets:select(Ets, lookup_agent_match_spec(Fqsn, AgentId)) of
+    [] ->
+      {reply, {error, undefined}, S0};
+    List ->
+      {reply, {ok, [
+        {AgentInstance, Definition}
+        || #agent_record{agent_instance = AgentInstance, service_definition = Definition} <- List
+      ]}, S0}
+  end.
+
+
+
+map(Fqsn, AgentId) ->
+  AgentKey = ?agent_hashring_key(Fqsn, AgentId),
+  {ok, HR} = router_hashring:get(),
+  router_hashring_po2:map(HR, AgentKey).
+
+
+
+%% This function causes dialyzer error regarding record construction:
+%% > Record construction
+%% > #agent_record{... :: '_'}
+%% > violates the declared type of ...
+-dialyzer({nowarn_function, [lookup_agent_match_spec/2]}).
+
+% ets:fun2ms(
+%   fun(#agent_record{id = ?agent_record_id(Fqsn_, AgentId_, '_'), _ = '_'} = Obj)
+%   when Fqsn == Fqsn_, AgentId == AgentId_ ->
+%     Obj
+%   end
+% )
+lookup_agent_match_spec(Fqsn, AgentId) ->
+  [{
+    #agent_record{id = ?agent_record_id('$1', '$2', '_'), _ = '_'},
+    [{'==', '$1', {const,Fqsn}}, {'==', '$2', {const,AgentId}}],
+    ['$_']
+  }].

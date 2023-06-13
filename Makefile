@@ -9,8 +9,10 @@ MAKEFLAGS += --warn-undefined-variables
 MAKEFLAGS += --no-builtin-rules
 SHELL := bash
 
-ERLC := $(shell which erlc)
-DOCKER := $(shell which docker)
+include arch.mk
+
+################################################################################
+# Directories
 
 ROUTER_DIR_ROOT := $(abspath ./)
 ROUTER_DIR_APPS := $(ROUTER_DIR_ROOT)/apps
@@ -22,17 +24,22 @@ ROUTER_DIR_TOOLS := $(ROUTER_DIR_ROOT)/_tools
 ROUTER_DIR_LOGS := $(ROUTER_DIR_ROOT)/_logs
 ROUTER_DIR_PROTO := $(ROUTER_DIR_APPS)/router_pb/priv/proto
 
+REQUIRED_DIRS = $(ROUTER_DIR_TOOLS) $(ROUTER_DIR_LOGS)
+_MKDIRS := $(shell for d in $(REQUIRED_DIRS); do \
+		[[ -d $$d ]] || mkdir -p $$d; \
+	done)
+
+################################################################################
+# Required executables
+
+ERLC := $(shell which erlc)
+DOCKER := $(shell which docker)
 ifeq (, $(ERLC))
 $(warning "No erlc found, is erlang installed?")
 endif
 ifeq (, $(DOCKER))
 $(warning "No docker found, is it installed?")
 endif
-
-REQUIRED_DIRS = $(ROUTER_DIR_TOOLS) $(ROUTER_DIR_LOGS)
-_MKDIRS := $(shell for d in $(REQUIRED_DIRS); do \
-		[[ -d $$d ]] || mkdir -p $$d; \
-	done)
 
 define print_app_env
 	@printenv | grep ^ROUTER | grep -v print_app_env
@@ -66,8 +73,23 @@ ROUTER_DIR_TOOLS_LUX := $(ROUTER_DIR_TOOLS)/lux
 TOOL_LUX := $(ROUTER_DIR_TOOLS_LUX)/bin/lux
 TOOL_LUX_VERSION := $(shell cat $(ROUTER_DIR_TOOLS)/.lux_version)
 $(TOOL_LUX):
+	mkdir -p $(ROUTER_DIR_TOOLS_LUX)
 	git clone --branch $(TOOL_LUX_VERSION) --depth 1 https://github.com/hawk/lux.git $(ROUTER_DIR_TOOLS_LUX)
 	@cd $(ROUTER_DIR_TOOLS_LUX) && autoconf && ./configure && make
+
+ROUTER_DIR_TOOLS_EVANS := $(ROUTER_DIR_TOOLS)/evans
+TOOL_EVANS := $(ROUTER_DIR_TOOLS_EVANS)/evans
+TOOL_EVANS_VERSION := $(shell cat $(ROUTER_DIR_TOOLS)/.evans_version)
+$(TOOL_EVANS):
+	mkdir -p $(ROUTER_DIR_TOOLS_EVANS)
+	curl -L -o $(ROUTER_DIR_TOOLS_EVANS)/evans.tar.gz \
+	https://github.com/ktr0731/evans/releases/download/$(TOOL_EVANS_VERSION)/evans_$(OS)_$(ARCH).tar.gz
+	tar -xvf $(ROUTER_DIR_TOOLS_EVANS)/evans.tar.gz -C $(ROUTER_DIR_TOOLS_EVANS)
+
+ROUTER_DIR_TOOLS_STATELESS_SERVICE := $(ROUTER_DIR_TOOLS)/stateless_virtual_service
+TOOL_STATELESS_SERVICE := $(ROUTER_DIR_TOOLS_STATELESS_SERVICE)/service.py
+stateless-service-%:
+	$(MAKE) -C $(ROUTER_DIR_TOOLS_STATELESS_SERVICE) $*
 
 ################################################################################
 # Helpers
@@ -120,11 +142,17 @@ run: $(RELEASE_BIN)
 	$(call print_app_env)
 	$(RELEASE_BIN) console
 
+.PHONY: logtail
+ROUTER_LOGTAIL_LEVEL ?= debug
+logtail:
+	tail -F $(ROUTER_DIR_LOGS)/lgr_$(ROUTER_LOGTAIL_LEVEL).log.1 | grcat .grc-flatlog.conf
+
 ################################################################################
 # Test
 
 .PHONY: check
-check: dialyze unit-tests common-tests lux-tests
+# Adding `all` as a dependency to check if the release is assembling correctly
+check: all dialyze unit-tests common-tests lux-tests
 
 .PHONY: dialyze
 dialyze:
@@ -141,6 +169,7 @@ unit-tests:
 .PHONY: common-tests
 ROUTER_DIR_TESTS_CT := $(ROUTER_DIR_TESTS)/ct
 ROUTER_DIR_TESTS_CT_LOGS := $(ROUTER_DIR_TESTS_CT)/_logs
+COMMON_TEST_OPTS ?=
 common-tests:
 	@echo ":: CT RUN"
 	$(REBAR) as test ct --logdir $(ROUTER_DIR_TESTS_CT_LOGS) $(COMMON_TEST_OPTS)
@@ -153,7 +182,7 @@ TEST_CASES := $(shell \
   | grep '$(SCOPE)' | sort -u \
 )
 FAILED_CASES := $(ROUTER_DIR_TESTS_LUX)/.failed_cases
-lux-tests: $(RELEASE_TEST_BIN) $(RELEASE_TEST_BIN_CLI) $(TOOL_LUX)
+lux-tests: $(RELEASE_TEST_BIN) $(RELEASE_TEST_BIN_CLI) $(TOOL_LUX) $(TOOL_EVANS)
 	@echo ":: LUX TESTS"
 	rm -f $(FAILED_CASES)
 	@$(foreach TEST_CASE, $(TEST_CASES), \
@@ -174,6 +203,12 @@ lux-tests: $(RELEASE_TEST_BIN) $(RELEASE_TEST_BIN_CLI) $(TOOL_LUX)
 		echo "All test cases passed."; \
 		echo ":: LUX END"; \
 	fi
+
+# quite dirty, but useful for debugging tests
+.PHONY: lux-logtail
+TEST_CASES_LOGFILES := $(foreach TEST_CASE, $(TEST_CASES), $(addsuffix /router_logs/test/lgr_debug.log.1, $(TEST_CASE)))
+lux-logtail:
+	tail -F $(TEST_CASES_LOGFILES) | grcat .grc-flatlog.conf
 
 ################################################################################
 # Clean
@@ -199,5 +234,6 @@ clean: common-clean lux-clean
 
 .PHONY: dist-clean
 dist-clean: clean
-	$(REBAR) unlock
+	$(REBAR) unlock --all
 	rm -rf _build
+	rm -rf $(ROUTER_DIR_TOOLS_LUX) $(ROUTER_DIR_TOOLS_EVANS)

@@ -7,14 +7,6 @@
 -include_lib("typr/include/typr_specs_ct.hrl").
 -include_lib("router_grpc/include/router_grpc_service_registry.hrl").
 
--define(node, 1).
--define(node_invalid, 2).
--define(bucket_1, 1).
--define(bucket_2, 2).
--define(bucket_3, 3).
--define(bucket_invalid, 4).
--define(buckets, [?bucket_1, ?bucket_2, ?bucket_3]).
-
 -define(service_package, <<"lg.test.package">>).
 -define(service_name, <<"StatefulService">>).
 -define(service_fq_name, <<"lg.test.package.StatefulService">>).
@@ -60,16 +52,13 @@ all() -> [
 
 groups() -> [
   {g_register, [sequential], [
-    g_register_noconflict, g_register_conflict_preemptive, g_register_conflict_blocking,
-    g_register_invalid_node, g_register_invalid_bucket
+    g_register_noconflict, g_register_conflict_preemptive, g_register_conflict_blocking
   ]},
   {g_lookup, [sequential], [
-    g_lookup_preemptive, g_lookup_blocking, g_lookup_nonexistent,
-    g_lookup_invalid_node, g_lookup_invalid_bucket
+    g_lookup_preemptive, g_lookup_blocking, g_lookup_nonexistent, g_lookup_bare
   ]},
   {g_unregister, [sequential], [
-    g_unregister_preemptive, g_unregister_blocking,
-    g_unregister_invalid_node, g_unregister_invalid_bucket
+    g_unregister_preemptive, g_unregister_blocking
   ]},
   {g_stream_terminate, [sequential], [
     g_stream_terminate_preemptive, g_stream_terminate_blocking
@@ -77,28 +66,40 @@ groups() -> [
 ].
 
 init_per_suite(Config) ->
-  application:ensure_all_started(gproc),
-  Config.
+  io:format("~p~n", [application:which_applications()]),
+  AppsState = router_common_test_helper:init_applications_state(),
+  ok = application:set_env(router, hashring, [{buckets_po2, 2}, {nodes_po2, 1}], [{persistent, true}]),
+  {ok, _} = application:ensure_all_started(router),
+  [{apps_state, AppsState} | Config].
 
 init_per_group(_Name, Config) ->
   Config.
 
 init_per_testcase(_Name, Config) ->
   erlang:process_flag(trap_exit, true),
-  {ok, Node} = router_hashring_node:start_link(#{node => ?node, buckets => ?buckets}, 'router-hashring-node-1'),
-  [{router_hashring_node, Node} | Config].
+  Config.
 
-end_per_testcase(_Name, Config) ->
-  Node = ?config(router_hashring_node, Config),
-  erlang:exit(Node, kill),
+end_per_testcase(_Name, _Config) ->
   ok.
 
 end_per_group(_Name, _Config) ->
   ok.
 
-end_per_suite(_Config) ->
-  application:stop(gproc),
+end_per_suite(Config) ->
+  router_common_test_helper:rollback_applications_state(?config(apps_state, Config)),
   ok.
+
+
+
+await_stopped(App) ->
+  Apps = application:which_applications(),
+  case lists:any(fun({App_, _, _}) when App_ == App -> true; (_) -> false end, Apps) of
+    true ->
+      io:format("waiting~n"),
+      await_stopped(App);
+    false ->
+      ok
+  end.
 
 
 
@@ -112,20 +113,10 @@ g_register_noconflict(_Config) ->
   Instance1 = <<"instance-0x00">>,
   Instance2 = <<"instance-0x01">>,
   %% Can register several non-conflicting agents on the node-bucket pair
-  ok = router_hashring_node:register_agent(?node, ?bucket_1, ?definition_preemptive, Agent1, Instance1, ?conflict_fun()),
-  ok = router_hashring_node:register_agent(?node, ?bucket_1, ?definition_preemptive, Agent2, Instance1, ?conflict_fun()),
-  ok = router_hashring_node:register_agent(?node, ?bucket_1, ?definition_preemptive, Agent1, Instance2, ?conflict_fun()),
-  ok = router_hashring_node:register_agent(?node, ?bucket_1, ?definition_preemptive, Agent2, Instance2, ?conflict_fun()),
-  %% Can register several non-conflicting agents on the another node-bucket pair
-  ok = router_hashring_node:register_agent(?node, ?bucket_2, ?definition_preemptive, Agent1, Instance1, ?conflict_fun()),
-  ok = router_hashring_node:register_agent(?node, ?bucket_2, ?definition_preemptive, Agent2, Instance1, ?conflict_fun()),
-  ok = router_hashring_node:register_agent(?node, ?bucket_2, ?definition_preemptive, Agent1, Instance2, ?conflict_fun()),
-  ok = router_hashring_node:register_agent(?node, ?bucket_2, ?definition_preemptive, Agent2, Instance2, ?conflict_fun()),
-  %% Node does not check on definitions consistency
-  ok = router_hashring_node:register_agent(?node, ?bucket_3, ?definition_preemptive, Agent1, Instance1, ?conflict_fun()),
-  ok = router_hashring_node:register_agent(?node, ?bucket_3, ?definition_preemptive, Agent2, Instance1, ?conflict_fun()),
-  ok = router_hashring_node:register_agent(?node, ?bucket_3, ?definition_blocking, Agent1, Instance2, ?conflict_fun()),
-  ok = router_hashring_node:register_agent(?node, ?bucket_3, ?definition_blocking, Agent2, Instance2, ?conflict_fun()),
+  ok = router_hashring_node:register_agent(?definition_preemptive, Agent1, Instance1, ?conflict_fun()),
+  ok = router_hashring_node:register_agent(?definition_preemptive, Agent2, Instance1, ?conflict_fun()),
+  ok = router_hashring_node:register_agent(?definition_preemptive, Agent1, Instance2, ?conflict_fun()),
+  ok = router_hashring_node:register_agent(?definition_preemptive, Agent2, Instance2, ?conflict_fun()),
   ok.
 
 
@@ -133,8 +124,8 @@ g_register_noconflict(_Config) ->
 g_register_conflict_preemptive(_Config) ->
   Agent1 = <<"agent-1">>,
   Instance1 = <<"instance-0x00">>,
-  ok = router_hashring_node:register_agent(?node, ?bucket_1, ?definition_preemptive, Agent1, Instance1, ?conflict_fun()),
-  ok = router_hashring_node:register_agent(?node, ?bucket_1, ?definition_preemptive, Agent1, Instance1, ?conflict_fun()),
+  ok = router_hashring_node:register_agent(?definition_preemptive, Agent1, Instance1, ?conflict_fun()),
+  ok = router_hashring_node:register_agent(?definition_preemptive, Agent1, Instance1, ?conflict_fun()),
   assertConflict(?service_fq_name, Agent1, Instance1),
   ok.
 
@@ -143,24 +134,8 @@ g_register_conflict_preemptive(_Config) ->
 g_register_conflict_blocking(_Config) ->
   Agent1 = <<"agent-1">>,
   Instance1 = <<"instance-0x00">>,
-  ok = router_hashring_node:register_agent(?node, ?bucket_1, ?definition_blocking, Agent1, Instance1, ?conflict_fun()),
-  {error, conflict} = router_hashring_node:register_agent(?node, ?bucket_1, ?definition_blocking, Agent1, Instance1, ?conflict_fun()),
-  ok.
-
-
-
-g_register_invalid_node(_Config) ->
-  Agent1 = <<"agent-1">>,
-  Instance1 = <<"instance-0x00">>,
-  {error, invalid_node} = router_hashring_node:register_agent(?node_invalid, ?bucket_1, ?definition_preemptive, Agent1, Instance1, ?conflict_fun()),
-  ok.
-
-
-
-g_register_invalid_bucket(_Config) ->
-  Agent1 = <<"agent-1">>,
-  Instance1 = <<"instance-0x00">>,
-  {error, invalid_bucket} = router_hashring_node:register_agent(?node, ?bucket_invalid, ?definition_preemptive, Agent1, Instance1, ?conflict_fun()),
+  ok = router_hashring_node:register_agent(?definition_blocking, Agent1, Instance1, ?conflict_fun()),
+  {error, conflict} = router_hashring_node:register_agent(?definition_blocking, Agent1, Instance1, ?conflict_fun()),
   ok.
 
 
@@ -172,8 +147,8 @@ g_register_invalid_bucket(_Config) ->
 g_lookup_preemptive(_Config) ->
   Agent1 = <<"agent-1">>,
   Instance1 = <<"instance-0x00">>,
-  ok = router_hashring_node:register_agent(?node, ?bucket_1, ?definition_preemptive, Agent1, Instance1, ?conflict_fun()),
-  {ok, ?definition_preemptive} = router_hashring_node:lookup_agent(?node, ?bucket_1, ?service_fq_name, Agent1, Instance1),
+  ok = router_hashring_node:register_agent(?definition_preemptive, Agent1, Instance1, ?conflict_fun()),
+  {ok, ?definition_preemptive} = router_hashring_node:lookup_agent(?service_fq_name, Agent1, Instance1),
   ok.
 
 
@@ -181,8 +156,8 @@ g_lookup_preemptive(_Config) ->
 g_lookup_blocking(_Config) ->
   Agent1 = <<"agent-1">>,
   Instance1 = <<"instance-0x00">>,
-  ok = router_hashring_node:register_agent(?node, ?bucket_1, ?definition_blocking, Agent1, Instance1, ?conflict_fun()),
-  {ok, ?definition_blocking} = router_hashring_node:lookup_agent(?node, ?bucket_1, ?service_fq_name, Agent1, Instance1),
+  ok = router_hashring_node:register_agent(?definition_blocking, Agent1, Instance1, ?conflict_fun()),
+  {ok, ?definition_blocking} = router_hashring_node:lookup_agent(?service_fq_name, Agent1, Instance1),
   ok.
 
 
@@ -190,23 +165,21 @@ g_lookup_blocking(_Config) ->
 g_lookup_nonexistent(_Config) ->
   Agent1 = <<"agent-1">>,
   Instance1 = <<"instance-0x00">>,
-  {error, undefined} = router_hashring_node:lookup_agent(?node, ?bucket_1, ?service_fq_name, Agent1, Instance1),
+  {error, undefined} = router_hashring_node:lookup_agent(?service_fq_name, Agent1, Instance1),
   ok.
 
 
 
-g_lookup_invalid_node(_Config) ->
+g_lookup_bare(_Config) ->
   Agent1 = <<"agent-1">>,
   Instance1 = <<"instance-0x00">>,
-  {error, invalid_node} = router_hashring_node:lookup_agent(?node_invalid, ?bucket_1, ?service_fq_name, Agent1, Instance1),
-  ok.
-
-
-
-g_lookup_invalid_bucket(_Config) ->
-  Agent1 = <<"agent-1">>,
-  Instance1 = <<"instance-0x00">>,
-  {error, invalid_bucket} = router_hashring_node:lookup_agent(?node, ?bucket_invalid, ?service_fq_name, Agent1, Instance1),
+  Instance2 = <<"instance-0x01">>,
+  ok = router_hashring_node:register_agent(?definition_preemptive, Agent1, Instance1, ?conflict_fun()),
+  ok = router_hashring_node:register_agent(?definition_preemptive, Agent1, Instance2, ?conflict_fun()),
+  {ok, List} = router_hashring_node:lookup_agent(?service_fq_name, Agent1),
+  ?assertEqual(2, length(List)),
+  ?definition_preemptive = proplists:get_value(Instance1, List),
+  ?definition_preemptive = proplists:get_value(Instance2, List),
   ok.
 
 
@@ -218,8 +191,8 @@ g_lookup_invalid_bucket(_Config) ->
 g_unregister_preemptive(_Config) ->
   Agent1 = <<"agent-1">>,
   Instance1 = <<"instance-0x00">>,
-  ok = router_hashring_node:register_agent(?node, ?bucket_1, ?definition_preemptive, Agent1, Instance1, ?conflict_fun()),
-  ok = router_hashring_node:unregister_agent(?node, ?bucket_1, ?service_fq_name, Agent1, Instance1),
+  ok = router_hashring_node:register_agent(?definition_preemptive, Agent1, Instance1, ?conflict_fun()),
+  ok = router_hashring_node:unregister_agent(?service_fq_name, Agent1, Instance1),
   ok.
 
 
@@ -227,24 +200,8 @@ g_unregister_preemptive(_Config) ->
 g_unregister_blocking(_Config) ->
   Agent1 = <<"agent-1">>,
   Instance1 = <<"instance-0x00">>,
-  ok = router_hashring_node:register_agent(?node, ?bucket_1, ?definition_blocking, Agent1, Instance1, ?conflict_fun()),
-  ok = router_hashring_node:unregister_agent(?node, ?bucket_1, ?service_fq_name, Agent1, Instance1),
-  ok.
-
-
-
-g_unregister_invalid_node(_Config) ->
-  Agent1 = <<"agent-1">>,
-  Instance1 = <<"instance-0x00">>,
-  {error, invalid_node} = router_hashring_node:unregister_agent(?node_invalid, ?bucket_1, ?service_fq_name, Agent1, Instance1),
-  ok.
-
-
-
-g_unregister_invalid_bucket(_Config) ->
-  Agent1 = <<"agent-1">>,
-  Instance1 = <<"instance-0x00">>,
-  {error, invalid_bucket} = router_hashring_node:unregister_agent(?node, ?bucket_invalid, ?service_fq_name, Agent1, Instance1),
+  ok = router_hashring_node:register_agent(?definition_blocking, Agent1, Instance1, ?conflict_fun()),
+  ok = router_hashring_node:unregister_agent(?service_fq_name, Agent1, Instance1),
   ok.
 
 
@@ -256,10 +213,10 @@ g_unregister_invalid_bucket(_Config) ->
 g_stream_terminate_preemptive(_Config) ->
   Agent1 = <<"agent-1">>,
   Instance1 = <<"instance-0x00">>,
-  Mock = stream_h_mock(?node, ?bucket_1, ?definition_preemptive, Agent1, Instance1, ?conflict_fun()),
-  {ok, ?definition_preemptive} = router_hashring_node:lookup_agent(?node, ?bucket_1, ?service_fq_name, Agent1, Instance1),
+  Mock = stream_h_mock(?definition_preemptive, Agent1, Instance1, ?conflict_fun()),
+  {ok, ?definition_preemptive} = router_hashring_node:lookup_agent(?service_fq_name, Agent1, Instance1),
   ok = stream_h_mock_kill(Mock),
-  {error, undefined} = router_hashring_node:lookup_agent(?node, ?bucket_1, ?service_fq_name, Agent1, Instance1),
+  {error, undefined} = router_hashring_node:lookup_agent(?service_fq_name, Agent1, Instance1),
   ok.
 
 
@@ -267,10 +224,10 @@ g_stream_terminate_preemptive(_Config) ->
 g_stream_terminate_blocking(_Config) ->
   Agent1 = <<"agent-1">>,
   Instance1 = <<"instance-0x00">>,
-  Mock = stream_h_mock(?node, ?bucket_1, ?definition_blocking, Agent1, Instance1, ?conflict_fun()),
-  {ok, ?definition_blocking} = router_hashring_node:lookup_agent(?node, ?bucket_1, ?service_fq_name, Agent1, Instance1),
+  Mock = stream_h_mock(?definition_blocking, Agent1, Instance1, ?conflict_fun()),
+  {ok, ?definition_blocking} = router_hashring_node:lookup_agent(?service_fq_name, Agent1, Instance1),
   ok = stream_h_mock_kill(Mock),
-  {error, undefined} = router_hashring_node:lookup_agent(?node, ?bucket_1, ?service_fq_name, Agent1, Instance1),
+  {error, undefined} = router_hashring_node:lookup_agent(?service_fq_name, Agent1, Instance1),
   ok.
 
 
@@ -279,10 +236,10 @@ g_stream_terminate_blocking(_Config) ->
 
 
 
-stream_h_mock(Node, Bucket, Definition, AgentId, AgentInstance, ConflictFun) ->
+stream_h_mock(Definition, AgentId, AgentInstance, ConflictFun) ->
   Self = self(),
   Pid = spawn(fun() ->
-    ok = router_hashring_node:register_agent(Node, Bucket, Definition, AgentId, AgentInstance, ConflictFun),
+    ok = router_hashring_node:register_agent(Definition, AgentId, AgentInstance, ConflictFun),
     Self ! registered,
     stream_h_mock_loop_forever()
   end),

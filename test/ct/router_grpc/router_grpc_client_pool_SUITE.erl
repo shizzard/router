@@ -31,21 +31,23 @@ all() -> [
 
 groups() -> [
   {g_client_pool_master_sup, [sequential], [
-    g_client_pool_master_sup_start_pool, g_client_pool_master_sup_stop_pool, g_client_pool_master_sup_already_started_pool
+    g_client_pool_master_sup_start_pool, g_client_pool_master_sup_stop_pool,
+    g_client_pool_master_sup_already_started_pool
   ]},
   {g_client_pool, [sequential], [
-    g_client_pool_spawn_workers, g_client_pool_despawn_workers, g_client_pool_over_despawn_workers
+    g_client_pool_spawn_workers, g_client_pool_despawn_workers, g_client_pool_over_despawn_workers,
+    g_client_pool_get_workers
   ]}
 ].
 
 init_per_suite(Config) ->
+  AppsState = router_common_test_helper:init_applications_state(),
   ok = application:set_env(router_grpc, listener, [{port, ?port}], [{persistent, true}]),
   ok = application:set_env(router_grpc, client, [{pool_size, 10}], [{persistent, true}]),
   ok = application:set_env(router_grpc, session, [{inactivity_limit_ms, 15000}], [{persistent, true}]),
   ok = application:set_env(router, hashring, [{buckets_po2, 2}, {nodes_po2, 1}], [{persistent, true}]),
   {ok, _} = application:ensure_all_started(router_grpc),
-  {ok, _} = application:ensure_all_started(gun),
-  Config.
+  [{apps_state, AppsState} | Config].
 
 init_per_group(_Name, Config) ->
   Config.
@@ -64,10 +66,8 @@ end_per_testcase(_Name, _Config) ->
 end_per_group(_Name, _Config) ->
   ok.
 
-end_per_suite(_Config) ->
-  ok = application:stop(gun),
-  ok = application:stop(cowboy),
-  ok = application:stop(router_grpc),
+end_per_suite(Config) ->
+  router_common_test_helper:rollback_applications_state(?config(apps_state, Config)),
   ok.
 
 
@@ -132,6 +132,14 @@ g_client_pool_over_despawn_workers(_Config) ->
   ok = router_grpc_client_pool:despawn_workers(?definition, ?workers_n + 4),
   ?assertEqual(0, length(unpack(router_grpc_client_pool:get_workers(?definition)))),
   ?assertEqual(0, length(supervisor:which_children(router_grpc_client_pool_worker_sup:pid(?definition)))).
+
+g_client_pool_get_workers(_Config) ->
+  {ok, _} = router_grpc_client_pool_master_sup:start_pool(?definition, ?client, ?workers_n),
+  {ok, Workers} = router_grpc_client_pool:get_workers(?definition),
+  ?assertEqual(?workers_n, length(Workers)),
+  ?assert(lists:member(unpack(router_grpc_client_pool:get_random_worker(?definition)), Workers)),
+  ?assert(lists:member(unpack(router_grpc_client_pool:get_random_worker(?definition)), Workers)),
+  ?assert(lists:member(unpack(router_grpc_client_pool:get_random_worker(?definition)), Workers)).
 
 
 

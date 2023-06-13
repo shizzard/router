@@ -5,7 +5,7 @@
 -include_lib("router_grpc/include/router_grpc_client.hrl").
 -include("router_grpc_service_registry.hrl").
 
--export([is_ready/1, await_ready/2, grpc_request/5, grpc_data/3, grpc_terminate/2]).
+-export([is_ready/1, await_ready/2, grpc_request/5, grpc_data/3, grpc_data/4, grpc_terminate/2]).
 -export([start_link/1, start_link/2, init/1, callback_mode/0, handle_event/4]).
 
 -record(caller, {
@@ -74,8 +74,8 @@
 -define(msg_is_ready(), {msg_is_ready}).
 -define(msg_grpc_request(CallerPid, Service, Method, Headers),
   {msg_grpc_request, CallerPid, Service, Method, Headers}).
--define(msg_grpc_data(StreamRef, Data),
-  {msg_grpc_data, StreamRef, Data}).
+-define(msg_grpc_data(StreamRef, IsFin, Data),
+  {msg_grpc_data, StreamRef, IsFin, Data}).
 -define(msg_grpc_terminate(StreamRef), {msg_grpc_terminate, StreamRef}).
 
 -define(default_headers, #{
@@ -85,6 +85,7 @@
 }).
 
 -define(connection_check_interval, 100).
+
 
 
 
@@ -146,7 +147,22 @@ grpc_request(Pid, CallerPid, Service, Method, Headers) ->
   ).
 
 grpc_data(Pid, StreamRef, Data) ->
-  gen_statem:call(Pid, ?msg_grpc_data(StreamRef, Data)).
+  gen_statem:call(Pid, ?msg_grpc_data(StreamRef, false, Data)).
+
+
+
+-spec grpc_data(
+  Pid :: pid(),
+  StreamRef :: stream_ref(),
+  IsFin :: boolean(),
+  Data :: binary()
+) ->
+  typr:generic_return(
+    ErrorRet :: term()
+  ).
+
+grpc_data(Pid, StreamRef, IsFin, Data) ->
+  gen_statem:call(Pid, ?msg_grpc_data(StreamRef, IsFin, Data)).
 
 
 
@@ -261,13 +277,14 @@ handle_event(info, ?msg_gun_error(ConnPid, _Reason), _State, #state{conn_pid = C
   {stop, disconnected};
 
 %% Response message; notify client, remove the stream if IsFin flag is set, and continue
-handle_event(info, ?msg_gun_response(ConnPid, StreamRef, IsFin, Status, Headers), _State, #state{
+handle_event(info, ?msg_gun_response(ConnPid, StreamRef, Fin, Status, Headers), _State, #state{
   conn_pid = ConnPid, callers_index = CI0
 } = S0) ->
+  IsFin = router_grpc:fin_to_bool(Fin),
   case callers_index_get(StreamRef, CI0) of
     undefined -> ok;
     #caller{pid = Pid} ->
-      Pid ! ?grpc_event_response(StreamRef, IsFin, Status, Headers)
+      Pid ! ?grpc_event_response(StreamRef, IsFin, Status, maps:from_list(Headers))
   end,
   if
     IsFin ->
@@ -277,9 +294,10 @@ handle_event(info, ?msg_gun_response(ConnPid, StreamRef, IsFin, Status, Headers)
   end;
 
 %% Data message; notify client, remove the stream if IsFin flag is set, and continue
-handle_event(info, ?msg_gun_data(ConnPid, StreamRef, IsFin, <<0:1/unsigned-integer-unit:8, Len:4/unsigned-integer-unit:8, Data:Len/binary-unit:8>>), _State, #state{
+handle_event(info, ?msg_gun_data(ConnPid, StreamRef, Fin, <<0:1/unsigned-integer-unit:8, Len:4/unsigned-integer-unit:8, Data:Len/binary-unit:8>>), _State, #state{
   conn_pid = ConnPid, callers_index = CI0
 } = S0) ->
+  IsFin = router_grpc:fin_to_bool(Fin),
   case callers_index_get(StreamRef, CI0) of
     undefined -> ok;
     #caller{pid = Pid} ->
@@ -299,7 +317,7 @@ handle_event(info, ?msg_gun_trailers(ConnPid, StreamRef, Trailers), _State, #sta
   case callers_index_get(StreamRef, CI0) of
     undefined -> ok;
     #caller{pid = Pid} ->
-      Pid ! ?grpc_event_trailers(StreamRef, Trailers)
+      Pid ! ?grpc_event_trailers(StreamRef, maps:from_list(Trailers))
   end,
   {keep_state, S0};
 
@@ -320,10 +338,11 @@ handle_event({call, From}, ?msg_grpc_request(CallerPid, Service, Method, Headers
 handle_event({call, From}, ?msg_grpc_request(_CallerPid, _Service, _Method, _Headers), _State, _S0) ->
   {keep_state_and_data, [{reply, From, {error, not_ready}}]};
 
-handle_event({call, From}, ?msg_grpc_data(StreamRef, Data), _State, #state{conn_pid = ConnPid} = _S0) ->
+handle_event({call, From}, ?msg_grpc_data(StreamRef, IsFin, Data), _State, #state{conn_pid = ConnPid} = _S0) ->
   Len = erlang:byte_size(Data),
   Data1 = <<0:1/unsigned-integer-unit:8, Len:4/unsigned-integer-unit:8, Data:Len/binary-unit:8>>,
-  ok = gun:data(ConnPid, StreamRef, nofin, Data1),
+  Fin = router_grpc:bool_to_fin(IsFin),
+  ok = gun:data(ConnPid, StreamRef, Fin, Data1),
   {keep_state_and_data, [{reply, From, ok}]};
 
 handle_event({call, From}, ?msg_grpc_terminate(StreamRef), _State, #state{

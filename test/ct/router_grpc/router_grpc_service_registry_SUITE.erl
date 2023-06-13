@@ -36,12 +36,13 @@ groups() -> [
 ].
 
 init_per_suite(Config) ->
+  AppsState = router_common_test_helper:init_applications_state(),
   ok = application:set_env(router_grpc, listener, [{port, ?port}], [{persistent, true}]),
   ok = application:set_env(router_grpc, client, [{pool_size, 10}], [{persistent, true}]),
   ok = application:set_env(router_grpc, session, [{inactivity_limit_ms, 15000}], [{persistent, true}]),
   ok = application:set_env(router, hashring, [{buckets_po2, 2}, {nodes_po2, 1}], [{persistent, true}]),
   {ok, _} = application:ensure_all_started(router_grpc),
-  Config.
+  [{apps_state, AppsState} | Config].
 
 init_per_group(_Name, Config) ->
   Config.
@@ -55,10 +56,8 @@ end_per_testcase(_Name, _Config) ->
 end_per_group(_Name, _Config) ->
   ok.
 
-end_per_suite(_Config) ->
-  ok = application:stop(gproc),
-  ok = application:stop(cowboy),
-  ok = application:stop(router_grpc),
+end_per_suite(Config) ->
+  router_common_test_helper:rollback_applications_state(?config(apps_state, Config)),
   ok.
 
 

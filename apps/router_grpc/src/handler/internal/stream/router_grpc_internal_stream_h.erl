@@ -1,22 +1,21 @@
--module(router_grpc_stream_h).
+-module(router_grpc_internal_stream_h).
 -behaviour(gen_server).
 
 -include_lib("router_log/include/router_log.hrl").
 -include_lib("typr/include/typr_specs_gen_server.hrl").
 -include_lib("router_pb/include/registry_definitions.hrl").
--include("router_grpc_h_registry.hrl").
+-include("router_grpc_internal_registry.hrl").
 -include("router_grpc_service_registry.hrl").
 
 -export([lookup/1, recover/3, register_agent/4, unregister_agent/4, conflict/4]).
 -export([
-  start_link/5, init/1,
+  start_link/4, init/1,
   handle_call/3, handle_cast/2, handle_info/2,
   terminate/2, code_change/3
 ]).
 
 -record(state, {
   session_id :: session_id(),
-  definition_internal :: router_grpc:definition_internal(),
   definition_external :: router_grpc:definition_external(),
   conflict_fun = fun conflict/4 :: conflict_fun(),
   conn_pid :: pid() | undefined,
@@ -38,8 +37,6 @@
 -export_type([session_id/0, conflict_fun/0]).
 
 -define(gproc_key(Id), {?MODULE, Id}).
--define(agent_key(Fqsn, AgentId, AgentInstance),
-  {agent_key, Fqsn, AgentId, AgentInstance}).
 
 
 
@@ -72,7 +69,7 @@ lookup(SessionId) -> gproc:where({n, l, ?gproc_key(SessionId)}).
 
 -spec recover(
   Pid :: pid(),
-  SessionId :: router_grpc_stream_h:session_id(),
+  SessionId :: router_grpc_internal_stream_h:session_id(),
   ConnPid :: pid()
 ) ->
   typr:generic_return(
@@ -88,7 +85,7 @@ recover(Pid, SessionId, ConnPid) ->
   Pid :: pid(),
   Fqsn :: router_grpc:fq_service_name(),
   AgentId :: router_grpc:agent_id(),
-  AgentInstance :: router_grpc:agent_instance()
+  AgentInstance :: router_grpc:agent_instance() | undefined
 ) ->
   typr:generic_return(
     OkRet :: {
@@ -97,6 +94,10 @@ recover(Pid, SessionId, ConnPid) ->
     },
     ErrorRet :: conflict | internal_error
   ).
+
+register_agent(Pid, Fqsn, AgentId, undefined) ->
+  AgentInstance = router_grpc:gen_agent_instance(),
+  register_agent(Pid, Fqsn, AgentId, AgentInstance);
 
 register_agent(Pid, Fqsn, AgentId, AgentInstance) ->
   gen_server:call(Pid, ?msg_register_agent(Fqsn, AgentId, AgentInstance)).
@@ -137,26 +138,25 @@ conflict(StreamPid, Fqsn, AgentId, AgentInstance) ->
 
 -spec start_link(
   SessionId :: session_id(),
-  DefinitionInternal :: router_grpc:definition_internal(),
   DefinitionExternal :: router_grpc:definition_external(),
   ConnReq :: cowboy_req:req(),
   ConnPid :: pid()
 ) ->
   typr:ok_return(OkRet :: pid()).
 
-start_link(SessionId, DefinitionInternal, DefinitionExternal, ConnReq, ConnPid) ->
-  gen_server:start_link(?MODULE, {SessionId, DefinitionInternal, DefinitionExternal, ConnReq, ConnPid}, []).
+start_link(SessionId, DefinitionExternal, ConnReq, ConnPid) ->
+  gen_server:start_link(?MODULE, {SessionId, DefinitionExternal, ConnReq, ConnPid}, []).
 
 
 
-init({SessionId, DefinitionInternal, DefinitionExternal, ConnReq, ConnPid}) ->
-  router_log:component(router_grpc),
+init({SessionId, DefinitionExternal, ConnReq, ConnPid}) ->
+  router_log:component(router_grpc_internal),
   ok = quickrand:seed(),
   ok = init_prometheus_metrics(),
   {ok, Limit} = router_config:get(router_grpc, [session, inactivity_limit_ms]),
   S0 = #state{
     session_id = SessionId,
-    definition_internal = DefinitionInternal, definition_external = DefinitionExternal,
+    definition_external = DefinitionExternal,
     conn_pid = ConnPid, conn_req = ConnReq,
     session_inactivity_limit_ms = Limit
   },
@@ -223,7 +223,8 @@ handle_call(Unexpected, _GenReplyTo, S0) ->
 
 
 handle_cast(?msg_conflict(_Fqsn, AgentId, AgentInstance), S0) ->
-  router_grpc_h:push_data(#'lg.service.router.ControlStreamEvent'{
+  % fix
+  router_grpc_h:push_internal_pdu(#'lg.service.router.ControlStreamEvent'{
     id = #'lg.core.trait.Id'{tag = list_to_binary(uuid:uuid_to_string(uuid:get_v4_urandom()))},
     event = {conflict_event, #'lg.service.router.ControlStreamEvent.ConflictEvent'{
       agent_id = AgentId, agent_instance = AgentInstance,
@@ -303,10 +304,7 @@ init_prometheus_metrics() ->
 
 
 handle_call_register_agent(Fqsn, AgentId, AgentInstance, Definition, S0) ->
-  AgentKey = ?agent_key(Fqsn, AgentId, AgentInstance),
-  {ok, HR} = router_hashring:get(),
-  {Node, Bucket} = router_hashring_po2:map(HR, AgentKey),
-  case router_hashring_node:register_agent(Node, Bucket, Definition, AgentId, AgentInstance, S0#state.conflict_fun) of
+  case router_hashring_node:register_agent(Definition, AgentId, AgentInstance, S0#state.conflict_fun) of
     ok ->
       ?l_debug(#{
         text => "Agent registered", what => handle_call,
@@ -322,19 +320,13 @@ handle_call_register_agent(Fqsn, AgentId, AgentInstance, Definition, S0) ->
     {error, invalid_node} ->
       ?l_error(#{
         text => "Failed to register agent: invalid node", what => handle_call,
-        details => #{
-          fq_service_name => Fqsn, agent_id => AgentId, agent_instance => AgentInstance,
-          hashring => #{node => Node, bucket => Bucket}
-        }
+        details => #{fq_service_name => Fqsn, agent_id => AgentId, agent_instance => AgentInstance}
       }),
       {reply, {error, internal_error}, S0};
     {error, invalid_bucket} ->
       ?l_error(#{
         text => "Failed to register agent: invalid bucket", what => handle_call,
-        details => #{
-          fq_service_name => Fqsn, agent_id => AgentId, agent_instance => AgentInstance,
-          hashring => #{node => Node, bucket => Bucket}
-        }
+        details => #{fq_service_name => Fqsn, agent_id => AgentId, agent_instance => AgentInstance}
       }),
       {reply, {error, internal_error}, S0}
   end.
@@ -342,27 +334,18 @@ handle_call_register_agent(Fqsn, AgentId, AgentInstance, Definition, S0) ->
 
 
 handle_call_unregister_agent(Fqsn, AgentId, AgentInstance, S0) ->
-  AgentKey = ?agent_key(Fqsn, AgentId, AgentInstance),
-  {ok, HR} = router_hashring:get(),
-  {Node, Bucket} = router_hashring_po2:map(HR, AgentKey),
-  case router_hashring_node:unregister_agent(Node, Bucket, Fqsn, AgentId, AgentInstance) of
+  case router_hashring_node:unregister_agent(Fqsn, AgentId, AgentInstance) of
     ok -> {reply, {ok, {AgentId, AgentInstance}}, S0};
     {error, invalid_node} ->
       ?l_error(#{
         text => "Failed to unregister agent: invalid node", what => handle_call,
-        details => #{
-          fq_service_name => Fqsn, agent_id => AgentId, agent_instance => AgentInstance,
-          hashring => #{node => Node, bucket => Bucket}
-        }
+        details => #{fq_service_name => Fqsn, agent_id => AgentId, agent_instance => AgentInstance}
       }),
       {reply, {error, internal_error}, S0};
     {error, invalid_bucket} ->
       ?l_error(#{
         text => "Failed to unregister agent: invalid bucket", what => handle_call,
-        details => #{
-          fq_service_name => Fqsn, agent_id => AgentId, agent_instance => AgentInstance,
-          hashring => #{node => Node, bucket => Bucket}
-        }
+        details => #{fq_service_name => Fqsn, agent_id => AgentId, agent_instance => AgentInstance}
       }),
       {reply, {error, internal_error}, S0}
   end.

@@ -1,8 +1,8 @@
--module(router_grpc_h_registry).
+-module(router_grpc_internal_registry).
 
--include("router_grpc.hrl").
--include("router_grpc_service_registry.hrl").
--include("router_grpc_h_registry.hrl").
+-include_lib("router_grpc/include/router_grpc.hrl").
+-include_lib("router_grpc/include/router_grpc_service_registry.hrl").
+-include_lib("router_grpc/include/router_grpc_internal_registry.hrl").
 -include_lib("router_pb/include/registry_definitions.hrl").
 -include_lib("router_log/include/router_log.hrl").
 
@@ -20,7 +20,7 @@
   conn_req :: cowboy_req:req(),
   definition_internal :: router_grpc:definition_internal(),
   definition_external :: router_grpc:definition_external() | undefined,
-  session_id :: router_grpc_stream_h:session_id() | undefined,
+  session_id :: router_grpc_internal_stream_h:session_id() | undefined,
   handler_pid :: pid() | undefined
 }).
 -type state() :: #state{}.
@@ -468,7 +468,7 @@ control_stream_event_handle({resume_rq, #'lg.service.router.ControlStreamEvent.R
   ErrorList = lists:flatten([SessionErrors]),
   case ErrorList of
     [] ->
-      case router_grpc_stream_sup:lookup_handler(SessionId) of
+      case router_grpc_internal_stream_sup:lookup_handler(SessionId) of
         {ok, HPid} ->
           control_stream_event_handle_session_resume(HPid, SessionId, S0);
         {error, undefined} ->
@@ -542,8 +542,8 @@ control_stream_event_handle_register_service(Type, Package, Name, Methods, Cmp, 
 
 control_stream_event_handle_start_session(S0) ->
   SessionId = list_to_binary(uuid:uuid_to_string(uuid:get_v4_urandom())),
-  {ok, HPid} = router_grpc_stream_sup:start_handler(
-    SessionId, S0#state.definition_internal, S0#state.definition_external, S0#state.conn_req
+  {ok, HPid} = router_grpc_internal_stream_sup:start_handler(
+    SessionId, S0#state.definition_external, S0#state.conn_req
   ),
   {ok, {
     {init_rs, #'lg.service.router.ControlStreamEvent.InitRs'{
@@ -555,7 +555,7 @@ control_stream_event_handle_start_session(S0) ->
 
 
 control_stream_event_handle_session_resume(HPid, SessionId, S0) ->
-  case router_grpc_stream_sup:recover_handler(HPid, SessionId) of
+  case router_grpc_internal_stream_sup:recover_handler(HPid, SessionId) of
     ok ->
       {ok, {
         {init_rs, #'lg.service.router.ControlStreamEvent.InitRs'{
@@ -573,13 +573,12 @@ control_stream_event_handle_session_resume(HPid, SessionId, S0) ->
 
 
 control_stream_event_handle_register_agent(AgentId, <<>>, S0) ->
-  AgentInstance = list_to_binary(uuid:uuid_to_string(uuid:get_v4_urandom())),
-  control_stream_event_handle_register_agent(AgentId, AgentInstance, S0);
+  control_stream_event_handle_register_agent(AgentId, undefined, S0);
 
 control_stream_event_handle_register_agent(AgentId, AgentInstance, #state{
   definition_external = Definition, handler_pid = HPid
 } = S0) ->
-  case router_grpc_stream_h:register_agent(
+  case router_grpc_internal_stream_h:register_agent(
     HPid, Definition#router_grpc_service_registry_definition_external.fq_service_name, AgentId, AgentInstance
   ) of
     {ok, {AgentId_, AgentInstance_}} ->
@@ -630,7 +629,7 @@ control_stream_event_handle_register_agent(AgentId, AgentInstance, #state{
 control_stream_event_handle_unregister_agent(AgentId, AgentInstance, #state{
   definition_external = Definition, handler_pid = HPid
 } = S0) ->
-  case router_grpc_stream_h:unregister_agent(
+  case router_grpc_internal_stream_h:unregister_agent(
     HPid, Definition#router_grpc_service_registry_definition_external.fq_service_name, AgentId, AgentInstance
   ) of
     {ok, {_AgentId_, _AgentInstance_}} ->

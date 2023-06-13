@@ -8,7 +8,7 @@
 -include_lib("router_pb/include/registry_definitions.hrl").
 -include_lib("router_grpc/include/router_grpc_client.hrl").
 -include_lib("router_grpc/include/router_grpc.hrl").
--include_lib("router_grpc/include/router_grpc_h_registry.hrl").
+-include_lib("router_grpc/include/router_grpc_internal_registry.hrl").
 
 -define(port, 8137).
 -define(definition, registry_definitions).
@@ -29,13 +29,14 @@ groups() -> [
 ].
 
 init_per_suite(Config) ->
+  AppsState = router_common_test_helper:init_applications_state(),
   ok = application:set_env(router_grpc, listener, [{port, ?port}], [{persistent, true}]),
   ok = application:set_env(router_grpc, client, [{pool_size, 10}], [{persistent, true}]),
   ok = application:set_env(router_grpc, session, [{inactivity_limit_ms, 15000}], [{persistent, true}]),
   ok = application:set_env(router, hashring, [{buckets_po2, 2}, {nodes_po2, 1}], [{persistent, true}]),
   {ok, _} = application:ensure_all_started(router_grpc),
   {ok, _} = application:ensure_all_started(gun),
-  Config.
+  [{apps_state, AppsState} | Config].
 
 init_per_group(_Name, Config) ->
   Config.
@@ -52,10 +53,8 @@ end_per_testcase(_Name, _Config) ->
 end_per_group(_Name, _Config) ->
   ok.
 
-end_per_suite(_Config) ->
-  ok = application:stop(gun),
-  ok = application:stop(cowboy),
-  ok = application:stop(router_grpc),
+end_per_suite(Config) ->
+  router_common_test_helper:rollback_applications_state(?config(apps_state, Config)),
   ok.
 
 
@@ -97,9 +96,9 @@ g_happy_path_request(Config) ->
     Client, self(), <<"lg.service.router.RegistryService">>, <<"RegisterVirtualService">>, #{}
   ),
   ok = router_grpc_client:grpc_data(Client, StreamRef, Payload),
-  assert_response(StreamRef, nofin, 200, [?http2_header_content_type, ?grpc_header_user_agent]),
+  assert_response(StreamRef, false, 200, [?http2_header_content_type, ?grpc_header_user_agent]),
   assert_data(
-    StreamRef, nofin, 'lg.service.router.RegisterVirtualServiceRq',
+    StreamRef, false, 'lg.service.router.RegisterVirtualServiceRq',
     fun(#'lg.service.router.RegisterVirtualServiceRq'{}) -> ok end
   ),
   assert_trailers(StreamRef, #{
@@ -134,14 +133,14 @@ g_happy_path_multiplexed_request(Config) ->
     Client, self(), <<"lg.service.router.RegistryService">>, <<"RegisterVirtualService">>, #{}
   ),
   ok = router_grpc_client:grpc_data(Client, StreamRef2, Payload),
-  assert_response(StreamRef1, nofin, 200, [?http2_header_content_type, ?grpc_header_user_agent]),
-  assert_response(StreamRef2, nofin, 200, [?http2_header_content_type, ?grpc_header_user_agent]),
+  assert_response(StreamRef1, false, 200, [?http2_header_content_type, ?grpc_header_user_agent]),
+  assert_response(StreamRef2, false, 200, [?http2_header_content_type, ?grpc_header_user_agent]),
   assert_data(
-    StreamRef1, nofin, 'lg.service.router.RegisterVirtualServiceRq',
+    StreamRef1, false, 'lg.service.router.RegisterVirtualServiceRq',
     fun(#'lg.service.router.RegisterVirtualServiceRq'{}) -> ok end
   ),
   assert_data(
-    StreamRef2, nofin, 'lg.service.router.RegisterVirtualServiceRq',
+    StreamRef2, false, 'lg.service.router.RegisterVirtualServiceRq',
     fun(#'lg.service.router.RegisterVirtualServiceRq'{}) -> ok end
   ),
   assert_trailers(StreamRef1, #{
@@ -181,9 +180,9 @@ g_happy_path_bistream_request(Config) ->
     Client, self(), <<"lg.service.router.RegistryService">>, <<"ControlStream">>, #{}
   ),
   ok = router_grpc_client:grpc_data(Client, StreamRef, Payload1),
-  assert_response(StreamRef, nofin, 200, [?http2_header_content_type, ?grpc_header_user_agent]),
+  assert_response(StreamRef, false, 200, [?http2_header_content_type, ?grpc_header_user_agent]),
   assert_data(
-    StreamRef, nofin, 'lg.service.router.ControlStreamEvent',
+    StreamRef, false, 'lg.service.router.ControlStreamEvent',
     fun(#'lg.service.router.ControlStreamEvent'{
       id = #'lg.core.trait.Id'{tag = <<"id-1">>},
       event = {init_rs, #'lg.service.router.ControlStreamEvent.InitRs'{
@@ -208,7 +207,7 @@ assert_response(StreamRef, IsFin, Status, Headers) ->
     ?grpc_event_response(StreamRef, IsFin_, Status_, Headers_) ->
       ?assertEqual(IsFin, IsFin_),
       ?assertEqual(Status, Status_),
-      [?assert(proplists:is_defined(Header, Headers_)) || Header <- Headers]
+      [?assert(maps:is_key(Header, Headers_)) || Header <- Headers]
   after ?rcv_timeout ->
     dump_msgs(),
     error(didnt_get_grpc_response)
@@ -232,7 +231,7 @@ assert_trailers(StreamRef, Trailers) ->
   receive
     ?grpc_event_trailers(StreamRef, Trailers_) ->
       maps:foreach(fun(TK, TV) ->
-        ?assertEqual(TV, proplists:get_value(TK, Trailers_))
+        ?assertEqual(TV, maps:get(TK, Trailers_, undefined))
       end, Trailers)
   after ?rcv_timeout ->
     dump_msgs(),

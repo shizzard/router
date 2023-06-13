@@ -4,23 +4,22 @@
 -include("router_grpc_service_registry.hrl").
 -include_lib("router_log/include/router_log.hrl").
 
--export([push_data/2]).
+-export([push_headers/4, push_data/3, push_trailers/2, push_internal_pdu/2]).
 -export([init/3, data/4, info/3, terminate/3, early_error/5]).
 
 -record(state, {
+  request_id = uuid:uuid_to_string(uuid:get_v4_urandom(), binary_standard) :: binary(),
   stream_id :: cowboy_stream:streamid() | undefined,
   req :: cowboy_req:req() | undefined,
   handler_state :: term(),
   definition :: router_grpc:definition() | undefined,
   is_client_fin = false :: boolean(),
   is_server_fin = false :: boolean(),
+  imposed_headers = #{} :: cowboy_req:headers(),
   is_server_header_sent = false :: boolean(),
   data_buffer = <<>> :: binary()
 }).
 -type state() :: #state{}.
-
--define(fin_to_bool(Fin), case Fin of fin -> true; nofin -> false end).
--define(bool_to_fin(Bool), case Bool of true -> fin; false -> nofin end).
 
 -type grpc_code() :: non_neg_integer().
 -type grpc_message() :: unicode:unicode_binary().
@@ -29,11 +28,27 @@
 
 
 
+%% Defaults
+
+
+
+-define(default_headers, #{
+  ?http2_header_content_type => <<"application/grpc+proto">>,
+  ?grpc_header_user_agent => <<"grpc-erlang-lg-router/0.1.0">>
+}).
+
+-define(default_trailers, #{}).
+
+
+
 %% Messages
 
 
 
--define(msg_push_data(Pdu), {msg_push_data, Pdu}).
+-define(msg_push_headers(IsFin, Status, Headers), {msg_push_headers, IsFin, Status, Headers}).
+-define(msg_push_data(IsFin, Data), {msg_push_data, IsFin, Data}).
+-define(msg_push_trailers(Trailers), {msg_push_trailers, Trailers}).
+-define(msg_push_internal_pdu(Pdu), {msg_push_internal_pdu, Pdu}).
 
 
 
@@ -65,18 +80,55 @@
 ]).
 
 
+
 %% Interface
 
 
 
+-spec push_headers(
+  IsFin :: boolean(),
+  Status :: cowboy_req:status(),
+  Headers :: router_grpc_client:grpc_headers(),
+  Req :: cowboy_req:req()
+) ->
+  typr:generic_return(ErrorRet :: term()).
+
+push_headers(IsFin, Status, Headers, Req) ->
+  cowboy_req:cast(?msg_push_headers(IsFin, Status, Headers), Req).
+
+
+
 -spec push_data(
+  IsFin :: boolean(),
+  Data :: binary(),
+  Req :: cowboy_req:req()
+) ->
+  typr:generic_return(ErrorRet :: term()).
+
+push_data(IsFin, Data, Req) ->
+  cowboy_req:cast(?msg_push_data(IsFin, Data), Req).
+
+
+
+-spec push_trailers(
+  Trailers :: router_grpc_client:grpc_headers(),
+  Req :: cowboy_req:req()
+) ->
+  typr:generic_return(ErrorRet :: term()).
+
+push_trailers(Trailers, Req) ->
+  cowboy_req:cast(?msg_push_trailers(Trailers), Req).
+
+
+
+-spec push_internal_pdu(
   Pdu :: term(),
   Req :: cowboy_req:req()
 ) ->
   typr:generic_return(ErrorRet :: term()).
 
-push_data(Pdu, Req) ->
-  cowboy_req:cast(?msg_push_data(Pdu), Req).
+push_internal_pdu(Pdu, Req) ->
+  cowboy_req:cast(?msg_push_internal_pdu(Pdu), Req).
 
 
 
@@ -97,24 +149,42 @@ init(StreamId, #{
   headers := #{?http2_header_content_type := <<"application/grpc", _Rest/binary>>}
 } = Req, _Opts) ->
   router_log:component(router_grpc_h),
+  ok = quickrand:seed(),
   case router_grpc_service_registry:lookup_fqmn(Path) of
-    {ok, [#router_grpc_service_registry_definition_internal{module = Module} = Definition]} ->
-      ?l_debug(#{text => "Internal gRPC request", what => init, details => #{
-        service => Definition#router_grpc_service_registry_definition_internal.service_name,
-        method => Definition#router_grpc_service_registry_definition_internal.method
-      }}),
-      {
-        [],
-        #state{stream_id = StreamId, req = Req, handler_state = Module:init(Definition, Req), definition = Definition}
-      };
+    {ok, [#router_grpc_service_registry_definition_internal{} = Definition]} ->
+      init_internal(StreamId, Req, Definition);
+    {ok, [#router_grpc_service_registry_definition_external{} | _] = Definitions} ->
+      init_external(StreamId, Req, Definitions);
     {error, undefined} ->
-      ?l_debug(#{text => "Malformed gRPC request", what => init, details => #{path => Path}}),
-      response_commands(?grpc_code_unimplemented, ?grpc_message_unimplemented, #state{})
+      ?l_debug(#{text => "Unknown virtual service called", what => init, details => #{path => Path}}),
+      unary_response_commands(?grpc_code_not_found, ?grpc_message_not_found, #state{})
   end;
 
 init(_StreamId, _Req, _Opts) ->
   router_log:component(router_grpc),
   {{response, <<"400">>, #{}, <<>>}, #state{}}.
+
+
+
+init_internal(StreamId, Req, Definition) ->
+  ?l_debug(#{text => "Internal virtual service called", what => init, details => #{
+    service => Definition#router_grpc_service_registry_definition_internal.service_name,
+    method => Definition#router_grpc_service_registry_definition_internal.method
+  }}),
+  Module = Definition#router_grpc_service_registry_definition_internal.module,
+  HS0 = Module:init(Definition, Req),
+  wait_commands(#state{stream_id = StreamId, req = Req, handler_state = HS0, definition = Definition}).
+
+
+
+init_external(StreamId, Req, Definitions) ->
+  {HS0, Definition} = router_grpc_external:init(Definitions, Req),
+  ?l_debug(#{text => "External virtual service called", what => init, details => #{
+    service => Definition#router_grpc_service_registry_definition_external.fq_service_name,
+    host => Definition#router_grpc_service_registry_definition_external.host,
+    port => Definition#router_grpc_service_registry_definition_external.port
+  }}),
+  wait_commands(#state{stream_id = StreamId, req = Req, handler_state = HS0, definition = Definition}).
 
 
 
@@ -129,24 +199,64 @@ init(_StreamId, _Req, _Opts) ->
     State :: state()
   }.
 
-data(StreamId, Fin, Data, #state{definition = Definition, data_buffer = Buffer} = S0) ->
-  IsFin = ?fin_to_bool(Fin),
+data(StreamId, Fin, Data, #state{
+  definition = #router_grpc_service_registry_definition_internal{} = Definition,
+  data_buffer = Buffer
+} = S0) ->
+  IsFin = router_grpc:fin_to_bool(Fin),
   S1 = S0#state{stream_id = StreamId, is_client_fin = IsFin},
-  case router_grpc:unpack_data(<<Buffer/binary, Data/binary>>, Definition) of
+  case router_grpc:decode_pdu(<<Buffer/binary, Data/binary>>, Definition) of
     {ok, {Pdu, Rest}} ->
       handle_grpc_pdu(Pdu, S1#state{data_buffer = Rest});
     {more, Data} ->
       {[], S1#state{data_buffer = <<Buffer/binary, Data/binary>>}};
     {error, invalid_payload} ->
       ?l_debug(#{text => "gRPC payload decode error", what => data, result => error, details => #{
-        reason => invalid_payload
+        reason => invalid_payload, definition => Definition
       }}),
-      {grpc_error, ?grpc_code_invalid_argument, ?grpc_message_invalid_argument_payload};
+      error_commands(?grpc_code_invalid_argument, ?grpc_message_invalid_argument_payload, S0);
     {error, unimplemented_compression} ->
       ?l_debug(#{text => "gRPC payload decode error", what => data, result => error, details => #{
         reason => unimplemented_compression
       }}),
-      {grpc_error, ?grpc_code_unimplemented, ?grpc_message_unimplemented_compression}
+      error_commands(?grpc_code_unimplemented, ?grpc_message_unimplemented_compression, S0)
+  end;
+
+data(_StreamId, Fin, Data, #state{
+  definition = #router_grpc_service_registry_definition_external{} = Definition,
+  handler_state = HS0
+} = S0) ->
+  case router_grpc:unpack_data(Data) of
+    {ok, {UnpackedData, _Rest}} ->
+      IsFin = router_grpc:fin_to_bool(Fin),
+      {ok, HS1} = router_grpc_external:data(IsFin, UnpackedData, HS0),
+      wait_commands(S0#state{handler_state = HS1});
+      % case router_grpc_external:data(IsFin, UnpackedData, HS0) of
+      %   {ok, HS1} ->
+      %     wait_commands(S0#state{handler_state = HS1});
+      %   {error, Reason} ->
+      %     ?l_debug(#{
+      %       text => "Failed to process external call data", what => data, result => error, details => #{
+      %         service => Definition#router_grpc_service_registry_definition_external.fq_service_name,
+      %         host => Definition#router_grpc_service_registry_definition_external.host,
+      %         port => Definition#router_grpc_service_registry_definition_external.port,
+      %         reason => Reason
+      %       }
+      %     }),
+      %     error_commands(?grpc_code_internal, ?grpc_message_internal, S0#state{is_server_fin = true})
+      % end;
+    {more, Packet} ->
+      wait_commands(S0#state{data_buffer = Packet});
+    {error, Reason} ->
+      ?l_debug(#{
+        text => "Failed to unpack external call data", what => data, result => error, details => #{
+          service => Definition#router_grpc_service_registry_definition_external.fq_service_name,
+          host => Definition#router_grpc_service_registry_definition_external.host,
+          port => Definition#router_grpc_service_registry_definition_external.port,
+          reason => Reason
+        }
+      }),
+      error_commands(?grpc_code_internal, ?grpc_message_internal, S0#state{is_server_fin = true})
   end.
 
 
@@ -161,11 +271,25 @@ data(StreamId, Fin, Data, #state{definition = Definition, data_buffer = Buffer} 
     State :: state()
   }.
 
-info(StreamId, ?msg_push_data(Pdu), S0) ->
-  case router_grpc:pack_data(Pdu, S0#state.definition) of
+info(_StreamId, ?msg_push_headers(IsFin, _Status, Headers), S0) ->
+  ?l_dev(#{text => "HEADERS", details => Headers}),
+  headers_commands(S0#state{is_server_fin = IsFin, imposed_headers = Headers});
+
+info(_StreamId, ?msg_push_data(IsFin, Data), S0) ->
+  ?l_dev(#{text => "DATA", details => Data}),
+  data_commands(router_grpc:pack_data(Data), S0#state{is_server_fin = IsFin});
+
+info(_StreamId, ?msg_push_trailers(Trailers), S0) ->
+  ?l_dev(#{text => "TRAILERS", details => Trailers}),
+  GrpcCode = maybe_get_grpc_code(Trailers),
+  GrpcMessage = maybe_get_grpc_message(Trailers),
+  trailers_commands(GrpcCode, GrpcMessage, Trailers, S0);
+
+info(StreamId, ?msg_push_internal_pdu(Pdu), S0) ->
+  case router_grpc:encode_pack_pdu(Pdu, S0#state.definition) of
     {ok, Data} -> data_commands(Data, S0);
     {error, Reason} -> ?l_error(#{
-      text => "Failed to pack pushed data", what => info, details => #{
+      text => "Failed to encode pushed pdu", what => info, details => #{
         stream_id => StreamId, pdu => Pdu, reason => Reason
       }
     })
@@ -207,77 +331,57 @@ early_error(StreamId, Reason, PartialReq, Resp, Opts) ->
 
 
 
-%% Internals
+%% Response commands functions; to be used for generating the response
 
 
 
-response_commands(GrpcCode, GrpcMessage, S0) ->
-  {Headers, S1} = maybe_response_headers(S0),
-  {Headers ++ [
-    {trailers, #{
-      ?grpc_header_code => integer_to_binary(GrpcCode),
-      ?grpc_header_message => GrpcMessage
-    }},
-    stop
-  ], S1}.
+headers_commands(S0) -> response_headers(S0).
 
 
 
-response_commands(GrpcCode, GrpcMessage, Data, S0) ->
-  {Headers, S1} = maybe_response_headers(S0),
-  {Headers ++ [
-    {data, nofin, Data},
-    {trailers, #{
-      ?grpc_header_code => integer_to_binary(GrpcCode),
-      ?grpc_header_message => GrpcMessage
-    }},
-    stop
-  ], S1}.
+data_commands(Data, S0) ->
+  {HeadersCommands, S1} = response_headers(S0),
+  {DataCommands, S2} = response_data(Data, S1),
+  Commands = HeadersCommands ++ DataCommands,
+  {Commands, S2}.
 
 
 
-data_commands(Data, #state{is_server_fin = ServerFin} = S0) ->
-  {Headers, S1} = maybe_response_headers(S0),
-  {Headers ++ [
-    {data, ?bool_to_fin(ServerFin), Data}
-  ], S1}.
+trailers_commands(GrpcCode, GrpcMessage, Trailers, S0) ->
+  response_trailers(GrpcCode, GrpcMessage, Trailers, S0).
 
 
 
 error_commands(GrpcCode, GrpcMessage, S0) ->
-  {Headers, S1} = maybe_response_headers(S0),
-  {Headers ++ [
-    {trailers, #{
-      ?grpc_header_code => integer_to_binary(GrpcCode),
-      ?grpc_header_message => GrpcMessage
-    }},
-    stop
-  ], S1}.
+  unary_response_commands(GrpcCode, GrpcMessage, S0).
 
 
 
 error_commands(GrpcCode, GrpcMessage, Trailers, S0) ->
-  {Headers, S1} = maybe_response_headers(S0),
-  {Headers ++ [
-    {trailers, maps:merge(Trailers, #{
-      ?grpc_header_code => integer_to_binary(GrpcCode),
-      ?grpc_header_message => GrpcMessage
-    })},
-    stop
-  ], S1}.
+  unary_response_commands(GrpcCode, GrpcMessage, Trailers, S0).
 
 
 
-error_commands(GrpcCode, GrpcMessage, Trailers, Data, S0) ->
-  {Headers, S1} = maybe_response_headers(S0),
-  {Headers ++ [
-    {data, nofin, Data},
-    {trailers, maps:merge(Trailers, #{
-      ?grpc_header_code => integer_to_binary(GrpcCode),
-      ?grpc_header_message => GrpcMessage
-    })},
-    stop
-  ], S1}.
+unary_response_commands(GrpcCode, GrpcMessage, S0) ->
+  {HeadersCommands, S1} = response_headers(S0),
+  {TrailersCommands, S2} = response_trailers(GrpcCode, GrpcMessage, S1),
+  Commands = HeadersCommands ++ TrailersCommands ++ [stop],
+  {Commands, S2}.
+
+
+
+unary_response_commands(GrpcCode, GrpcMessage, Data, S0) when is_binary(Data) ->
+  {HeadersCommands, S1} = response_headers(S0),
+  {DataCommands, S2} = response_data(Data, S1#state{is_server_fin = false}),
+  {TrailersCommands, S3} = response_trailers(GrpcCode, GrpcMessage, S2),
+  Commands = HeadersCommands ++ DataCommands ++ TrailersCommands ++ [stop],
+  {Commands, S3};
+
+unary_response_commands(GrpcCode, GrpcMessage, Trailers, S0) when is_map(Trailers) ->
+  {HeadersCommands, S1} = response_headers(S0),
+  {TrailersCommands, S2} = response_trailers(GrpcCode, GrpcMessage, Trailers, S1),
+  Commands = HeadersCommands ++ TrailersCommands ++ [stop],
+  {Commands, S2}.
 
 
 
@@ -285,15 +389,52 @@ wait_commands(S0) -> {[], S0}.
 
 
 
-maybe_response_headers(#state{is_server_header_sent = false} = S0) ->
-  {[
-    {headers, <<"200">>, #{
-      ?http2_header_content_type => <<"application/grpc+proto">>,
-      ?grpc_header_user_agent => <<"grpc-erlang-lg-router/0.1.0">>
-    }}
-  ], S0#state{is_server_header_sent = true}};
+%% Response commands functions; not to be used directly, use the '_commands' functions
 
-maybe_response_headers(S0) -> {[], S0}.
+
+
+response_headers(#state{
+  is_server_header_sent = false,
+  imposed_headers = Headers,
+  request_id = RequestId
+} = S0) ->
+  {
+    [{headers, <<"200">>, maps:merge((?default_headers)#{
+        ?router_grpc_header_request_id => RequestId
+      },Headers
+    )}],
+    S0#state{is_server_header_sent = true}
+  };
+
+response_headers(S0) -> {[], S0}.
+
+
+
+response_data(Data, #state{is_server_fin = ServerFin} = S0) ->
+  {[{data, router_grpc:bool_to_fin(ServerFin), Data}], S0}.
+
+
+
+response_trailers(GrpcCode, GrpcMessage, S0) ->
+  response_trailers(GrpcCode, GrpcMessage, #{}, S0).
+
+
+
+response_trailers(GrpcCode, GrpcMessage, Trailers, #state{
+  request_id = RequestId
+} = S0) ->
+  {
+    [{trailers, maps:merge(Trailers, #{
+      ?grpc_header_code => grpc_code_to_binary(GrpcCode),
+      ?grpc_header_message => GrpcMessage,
+      ?router_grpc_header_request_id => RequestId
+    })}],
+    S0
+  }.
+
+
+
+%% Internals
 
 
 
@@ -313,9 +454,7 @@ handle_grpc_pdu(Pdu, #state{
     {error, {grpc_error, GrpcCode, GrpcMessage}, HS1} ->
       error_commands(GrpcCode, GrpcMessage, S0#state{handler_state = HS1});
     {error, {grpc_error, GrpcCode, GrpcMessage, TrailersOrData}, HS1} ->
-      error_commands(GrpcCode, GrpcMessage, TrailersOrData, S0#state{handler_state = HS1});
-    {error, {grpc_error, GrpcCode, GrpcMessage, Trailers, Data}, HS1} ->
-      error_commands(GrpcCode, GrpcMessage, Trailers, Data, S0#state{handler_state = HS1})
+      error_commands(GrpcCode, GrpcMessage, TrailersOrData, S0#state{handler_state = HS1})
   catch T:R:S ->
     ?l_error(#{
       text => "gRPC callback failure", what => handle_grpc_pdu,
@@ -326,12 +465,12 @@ handle_grpc_pdu(Pdu, #state{
 
 
 
-handle_grpc_pdu_send_response(Pdu, #state{definition = Details} = S0) ->
-  case {S0#state.is_client_fin, S0#state.is_server_fin, router_grpc:pack_data(Pdu, Details)} of
+handle_grpc_pdu_send_response(Pdu, #state{definition = Definition} = S0) ->
+  case {S0#state.is_client_fin, S0#state.is_server_fin, router_grpc:encode_pack_pdu(Pdu, Definition)} of
     {true, _, {ok, Data}} ->
-      response_commands(?grpc_code_ok, ?grpc_message_ok, Data, S0);
+      unary_response_commands(?grpc_code_ok, ?grpc_message_ok, Data, S0);
     {false, true, {ok, Data}} ->
-      response_commands(?grpc_code_ok, ?grpc_message_ok, Data, S0);
+      unary_response_commands(?grpc_code_ok, ?grpc_message_ok, Data, S0);
     {false, false, {ok, Data}} ->
       data_commands(Data, S0);
     {_, _, {error, Reason}} ->
@@ -341,3 +480,29 @@ handle_grpc_pdu_send_response(Pdu, #state{definition = Details} = S0) ->
       ),
       error_commands(?grpc_code_internal, ?grpc_message_internal, S0)
   end.
+
+
+
+grpc_code_to_binary(GrpcCode) when is_binary(GrpcCode) -> GrpcCode;
+grpc_code_to_binary(GrpcCode) when is_integer(GrpcCode) -> integer_to_binary(GrpcCode);
+grpc_code_to_binary(GrpcCode) -> error({invalid_grpc_code, GrpcCode}).
+
+
+
+maybe_get_grpc_code(#{?grpc_header_code := GrpcCode}) -> GrpcCode;
+maybe_get_grpc_code(Trailers) ->
+  ?l_warning(#{
+    text => "Upstream service is missing the gRPC code in its response, sending code OK (0)",
+    what => maybe_get_grpc_code, details => #{trailers => Trailers}
+  }),
+  ?grpc_code_ok.
+
+
+
+maybe_get_grpc_message(#{?grpc_header_message := GrpcCode}) -> GrpcCode;
+maybe_get_grpc_message(Trailers) ->
+  ?l_warning(#{
+    text => "Upstream service is missing the gRPC message in its response, sending default message (empty)",
+    what => maybe_get_grpc_message, details => #{trailers => Trailers}
+  }),
+  ?grpc_message_ok.

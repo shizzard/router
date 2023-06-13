@@ -1,4 +1,12 @@
+%% Router-specific headers
+
+-define(router_grpc_header_prefix, "x-router-").
+-define(router_grpc_header_agent_id, <<?router_grpc_header_prefix, "agent-id">>).
+-define(router_grpc_header_agent_instance, <<?router_grpc_header_prefix, "agent-instance">>).
+-define(router_grpc_header_request_id, <<?router_grpc_header_prefix, "request-id">>).
+
 %% Headers
+
 -define(grpc_header_code, <<"grpc-status">>).
 -define(grpc_header_message, <<"grpc-message">>).
 

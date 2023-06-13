@@ -4,7 +4,10 @@
 -include("router_grpc_service_registry.hrl").
 -include_lib("router_log/include/router_log.hrl").
 
--export([unpack_data/2, pack_data/2]).
+-export([unpack_decode_pdu/2, encode_pack_pdu/2]).
+-export([unpack_data/1, pack_data/1]).
+-export([decode_pdu/2, encode_pdu/2]).
+-export([gen_agent_instance/0, fin_to_bool/1, bool_to_fin/1]).
 
 
 
@@ -37,16 +40,16 @@
 
 
 
--define(incomplete_data(Compression, Len, Data), <<
-  Compression:1/unsigned-integer-unit:8,
-  Len:4/unsigned-integer-unit:8,
-  Data/binary
->>).
 -define(data(Compression, Len, Data, Rest), <<
   Compression:1/unsigned-integer-unit:8,
   Len:4/unsigned-integer-unit:8,
   Data:Len/binary-unit:8,
   Rest/binary
+>>).
+-define(incomplete_data(Compression, Len, Data), <<
+  Compression:1/unsigned-integer-unit:8,
+  Len:4/unsigned-integer-unit:8,
+  Data/binary
 >>).
 -define(uncompressed_data(Len, Data, Rest), ?data(0, Len, Data, Rest)).
 -define(compressed_data(Len, Data, Rest), ?data(1, Len, Data, Rest)).
@@ -57,23 +60,74 @@
 
 
 
--spec unpack_data(
+-spec unpack_decode_pdu(
   Data :: binary(),
-  Definition :: definition()
+  Definition :: definition_internal()
 ) ->
   typr:generic_return(
     OkRet :: {Pdu :: term(), Rest :: binary()},
     ErrorRet :: invalid_payload | unimplemented_compression
   ) | {more, Data :: binary()}.
 
-unpack_data(?incomplete_data(Compression, Len, Data) = Packet, _Definition)
-when (1 == Compression orelse 0 == Compression) andalso byte_size(Data) < Len ->
-  {more, Packet};
+unpack_decode_pdu(Data, Definition) ->
+  case unpack_data(Data) of
+    {ok, {Data, _Rest}} -> decode_pdu(Data, Definition);
+    Etc -> Etc
+  end.
 
-unpack_data(?compressed_data(Len, _Data, _Rest), _Definition) ->
+
+
+-spec encode_pack_pdu(
+  Pdu :: term(),
+  Definition :: definition()
+) ->
+  typr:generic_return(
+    OkRet :: binary(),
+    ErrorRet :: term()
+  ).
+
+encode_pack_pdu(Pdu, Definition) ->
+  case encode_pdu(Pdu, Definition) of
+    {ok, Data} -> {ok, pack_data(Data)};
+    Etc -> Etc
+  end.
+
+
+
+-spec unpack_data(Data :: binary()) ->
+  typr:generic_return(
+    OkRet :: {UnpackedData :: binary(), Rest :: binary()},
+    ErrorRet :: unimplemented_compression
+  ) | {more, Packet :: binary()}.
+
+unpack_data(?compressed_data(Len, _Data, _Rest)) -> {error, unimplemented_compression};
+unpack_data(?uncompressed_data(Len, Data, Rest)) -> {ok, {Data, Rest}};
+unpack_data(?incomplete_data(_Compression, _Len, _Data) = Packet) -> {more, Packet}.
+
+
+
+-spec pack_data(Data :: binary()) ->
+  Ret :: binary().
+
+pack_data(Data) ->
+  Len = erlang:byte_size(Data),
+  ?uncompressed_data(Len, Data, <<>>).
+
+
+
+-spec decode_pdu(
+  Data :: binary(),
+  Definition :: definition_internal()
+) ->
+  typr:generic_return(
+    OkRet :: {Pdu :: term(), Rest :: binary()},
+    ErrorRet :: invalid_payload | unimplemented_compression
+  ) | {more, Data :: binary()}.
+
+decode_pdu(?compressed_data(Len, _Data, _Rest), _Definition) ->
   {error, unimplemented_compression};
 
-unpack_data(
+decode_pdu(
   ?uncompressed_data(Len, Data, Rest),
   #router_grpc_service_registry_definition_internal{definition = Definition, input = Input}
 ) ->
@@ -86,12 +140,16 @@ unpack_data(
     {error, invalid_payload}
   end;
 
-unpack_data(_Packet, _Definition) ->
+decode_pdu(?incomplete_data(Compression, Len, Data) = Packet, _Definition)
+when (1 == Compression orelse 0 == Compression) andalso byte_size(Data) < Len ->
+  {more, Packet};
+
+decode_pdu(_Packet, _Definition) ->
   {error, invalid_payload}.
 
 
 
--spec pack_data(
+-spec encode_pdu(
   Pdu :: term(),
   Definition :: definition()
 ) ->
@@ -100,11 +158,35 @@ unpack_data(_Packet, _Definition) ->
     ErrorRet :: term()
   ).
 
-pack_data(Pdu, #router_grpc_service_registry_definition_internal{definition = Definition, output = Output}) ->
+encode_pdu(Pdu, #router_grpc_service_registry_definition_internal{definition = Definition, output = Output}) ->
   try Definition:encode_msg(Pdu, Output) of
     Data ->
-      Len = byte_size(Data),
-      {ok, ?uncompressed_data(Len, Data, <<>>)}
+      {ok, Data}
   catch error:Reason ->
     {error, Reason}
   end.
+
+
+
+-spec gen_agent_instance() ->
+  Ret :: agent_instance().
+
+gen_agent_instance() ->
+  list_to_binary(uuid:uuid_to_string(uuid:get_v4_urandom())).
+
+
+
+-spec fin_to_bool(Fin :: cowboy_stream:fin()) ->
+  Ret :: boolean().
+
+fin_to_bool(fin) -> true;
+fin_to_bool(nofin) -> false;
+fin_to_bool(Etc) -> error({invalid_fin, Etc}).
+
+
+
+-spec bool_to_fin(IsFin :: boolean()) ->
+  Ret :: cowboy_stream:fin().
+
+bool_to_fin(true) -> fin;
+bool_to_fin(false) -> nofin.

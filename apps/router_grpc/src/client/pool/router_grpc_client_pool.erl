@@ -7,7 +7,7 @@
 -include("router_grpc_service_registry.hrl").
 -include("router_grpc_client_pool.hrl").
 
--export([pid/1, spawn_workers/2, despawn_workers/2, get_workers/1]).
+-export([pid/1, spawn_workers/2, despawn_workers/2, get_workers/1, get_random_worker/1]).
 -export([
   start_link/2, init/1,
   handle_continue/2, handle_call/3, handle_cast/2, handle_info/2,
@@ -34,6 +34,7 @@
 -define(msg_spawn_workers(WorkersN), {msg_spawn_workers, WorkersN}).
 -define(msg_despawn_workers(WorkersN), {msg_despawn_workers, WorkersN}).
 -define(msg_get_workers(), {msg_get_workers}).
+-define(msg_get_random_worker(), {msg_get_random_worker}).
 
 
 
@@ -86,6 +87,17 @@ get_workers(Definition) ->
 
 
 
+-spec get_random_worker(Definition :: router_grpc:definition_external()) ->
+  typr:generic_return(
+    OkRet :: pid(),
+    ErrorRet :: empty
+  ).
+
+get_random_worker(Definition) ->
+  gen_server:call(pid(Definition), ?msg_get_random_worker()).
+
+
+
 -spec start_link(
   Definition :: router_grpc:definition_external(),
   WorkersN :: pos_integer()
@@ -132,7 +144,17 @@ handle_call(?msg_despawn_workers(WorkersN), _GenReplyTo, S0) ->
   {reply, ok, S1};
 
 handle_call(?msg_get_workers(), _GenReplyTo, #state{workers = Workers} = S0) ->
-  {reply, {ok, maps:values(Workers)}, S0};
+  {reply, {ok, [Pid || #worker{pid = Pid} <- maps:values(Workers)]}, S0};
+
+handle_call(?msg_get_random_worker(), _GenReplyTo, #state{workers = Workers} = S0) ->
+  WorkersList = maps:values(Workers),
+  case length(WorkersList) of
+    0 ->
+      {reply, {error, empty}, S0};
+    Len ->
+      #worker{pid = Pid} = lists:nth(quickrand:uniform(Len), WorkersList),
+      {reply, {ok, Pid}, S0}
+  end;
 
 handle_call(Unexpected, _GenReplyTo, S0) ->
   ?l_error(#{text => "Unexpected call", what => handle_call, details => Unexpected}),
