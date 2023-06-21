@@ -1,0 +1,24 @@
+{
+  "id": {"tag": "init-1"},
+  "event": {
+    "init_rq": {
+      "virtual_service": {
+        "service": {
+          "stateful": {
+            "package": "lg.service.example",
+            "name": "StatefulVirtualService",
+            "methods": [
+              {"name": "Get"},
+              {"name": "Set"}
+            ],
+            "cmp": "BLOCKING"
+          }
+        },
+        "endpoint": {
+          "host": "localhost",
+          "port": 8138
+        }
+      }
+    }
+  }
+}

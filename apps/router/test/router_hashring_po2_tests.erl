@@ -84,5 +84,5 @@ can_map_arbitrary_term_to_node_bucket_pair_test() ->
       (_, Acc) -> Acc
     end, {Node, Bucket, 0}, ChildSpecs),
     ?assertEqual(1, MatchedNodesN)
-  end, [list_to_binary(uuid:uuid_to_string(uuid:get_v4_urandom())) || _ <- lists:seq(1,100)]),
+  end, [uuid:uuid_to_string(uuid:get_v4_urandom(), binary_standard) || _ <- lists:seq(1,100)]),
   ok.

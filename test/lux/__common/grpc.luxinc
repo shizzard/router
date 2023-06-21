@@ -1,10 +1,9 @@
-[global grpc-prompt=GRPC-PROMPT:]
+[global grpcc-prompt=GRPC-PROMPT:]
 
 [macro grpcc-start-unary service method outdir etc infile]
   [progress (grpcc-unary ${service}/${method})]
   [invoke grpcc-start ${service} ${method} ${outdir} ${etc}]
   [invoke grpcc-conn-up]
-  [invoke grpcc-prompt]
   [invoke grpcc-send-data ${infile}]
   [invoke grpcc-recv-headers]
   [local headers=${out}]
@@ -19,9 +18,7 @@
   [progress (grpcc-unary ${service}/${method})]
   [invoke grpcc-start ${service} ${method} ${outdir} ${etc}]
   [invoke grpcc-conn-up]
-  [invoke grpcc-prompt]
   [invoke grpcc-send-data ${infile}]
-  [progress (recv headers)]
   [invoke grpcc-recv-headers]
   [local headers=${out}]
   [progress (recv trailers)]
@@ -37,7 +34,7 @@
     --service '${service}' \
     --method '${method}' \
     --outdir '${outdir}' \
-    --prompt '${grpc-prompt}' \
+    --prompt '${grpcc-prompt}' \
     --out-prefix $$(basename ${LUX_EXTRA_LOGS} .lux.extra.logs).${LUX_SHELLNAME} \
     --out-suffix response \
     ${etc}
@@ -47,33 +44,38 @@
 [macro grpcc-conn-up]
   [progress (connection up)]
   ???Connection established
+  [invoke grpcc-prompt]
 [endmacro]
 
 [macro grpcc-prompt]
-  ??${grpc-prompt}
+  ??${grpcc-prompt}
 [endmacro]
 
 [macro grpcc-send-data infile]
   [progress (send data)]
   !${infile}
+  [invoke grpcc-prompt]
 [endmacro]
 
 [macro grpcc-recv-headers]
   [progress (recv headers)]
   ?HEADERS:(.*)$
   [local out=$1]
+  [invoke grpcc-prompt]
 [endmacro]
 
 [macro grpcc-recv-data]
   [progress (recv data)]
   ?DATA:(.*)$
   [local out=$1]
+  [invoke grpcc-prompt]
 [endmacro]
 
 [macro grpcc-recv-trailers]
   [progress (recv trailers)]
   ?TRAILERS:(.*)$
   [local out=$1]
+  [invoke grpcc-prompt]
 [endmacro]
 
 [macro grpcc-check-ok]

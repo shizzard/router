@@ -15,13 +15,13 @@ ifeq (, $(PYTHON3))
 $(warning "No python3 found, is it installed?")
 endif
 
-STATELESS_SERVICE_DIR_ROOT := $(abspath ./)
+STATEFUL_SERVICE_DIR_ROOT := $(abspath ./)
 
 VENV_NAME ?= venv
 VENV_PYTHON3 := ${VENV_NAME}/bin/python3
 VENV_ACTIVATE = . $(VENV_NAME)/bin/activate
 
-STATELESS_SERVICE_EXEC := $(STATELESS_SERVICE_DIR_ROOT)/service.py
+STATEFUL_SERVICE_EXEC := $(STATEFUL_SERVICE_DIR_ROOT)/service.py
 PROTOC_EXEC := $(VENV_PYTHON3) -m grpc_tools.protoc
 
 include env-vars.mk
@@ -29,12 +29,12 @@ include env-vars.mk
 ################################################################################
 # Build
 
-STATELESS_SERVICE_PROTOS := $(wildcard $(STATELESS_SERVICE_DIR_ROOT)/*.proto)
-STATELESS_SERVICE_PROTOS_OUT := $(foreach proto, $(STATELESS_SERVICE_PROTOS), $(subst .proto,_pb2_grpc.py,$(proto)))
-build: $(VENV_ACTIVATE) $(STATELESS_SERVICE_PROTOS_OUT)
+STATEFUL_SERVICE_PROTOS := $(wildcard $(STATEFUL_SERVICE_DIR_ROOT)/*.proto)
+STATEFUL_SERVICE_PROTOS_OUT := $(foreach proto, $(STATEFUL_SERVICE_PROTOS), $(subst .proto,_pb2_grpc.py,$(proto)))
+build: $(VENV_ACTIVATE) $(STATEFUL_SERVICE_PROTOS_OUT)
 
 %_pb2_grpc.py: %.proto
-	$(PROTOC_EXEC) -I$(STATELESS_SERVICE_DIR_ROOT) --python_out=. --grpc_python_out=. $*.proto
+	$(PROTOC_EXEC) -I$(STATEFUL_SERVICE_DIR_ROOT) --python_out=. --grpc_python_out=. $*.proto
 
 $(VENV_ACTIVATE): requirements.txt
 	test -d $(VENV_NAME) || $(PYTHON3) -m venv $(VENV_NAME)
@@ -46,7 +46,7 @@ $(VENV_ACTIVATE): requirements.txt
 # Run
 
 run: build
-	$(VENV_ACTIVATE) && $(VENV_PYTHON3) $(STATELESS_SERVICE_EXEC) --port $(STATELESS_SERVICE_PORT)
+	$(VENV_ACTIVATE) && $(VENV_PYTHON3) $(STATEFUL_SERVICE_EXEC) --port $(STATEFUL_SERVICE_PORT)
 
 ################################################################################
 # Clean

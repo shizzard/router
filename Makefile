@@ -59,12 +59,12 @@ RELEASE_TEST_BIN_CLI := $(ROUTER_DIR_BUILD)/test/bin/router
 RELEASE_PROD_BIN := $(ROUTER_DIR_BUILD)/prod/rel/router/bin/router
 RELEASE_PROD_BIN_CLI := $(ROUTER_DIR_BUILD)/prod/bin/router
 
-SOURCE := $(shell find apps -iname "*.erl" -or -iname "*.hrl" -or -iname "*.app.src")
-PROTO := $(shell find apps -iname "*.proto")
-CONFIG := $(ROUTER_DIR_ROOT)/rebar.config $(ROUTER_DIR_CONFIG)/sys.config $(ROUTER_DIR_CONFIG)/vm.args
+ROUTER_SOURCE := $(shell find apps -iname "*.erl" -or -iname "*.hrl" -or -iname "*.app.src")
+ROUTER_PROTOS := $(shell find $(ROUTER_DIR_PROTO) -iname "*.proto")
+ROUTER_CONFIG := $(ROUTER_DIR_ROOT)/rebar.config $(ROUTER_DIR_CONFIG)/sys.config $(ROUTER_DIR_CONFIG)/vm.args
 
 .PHONY: all
-all: $(CONFIG) $(RELEASE_BIN) $(RELEASE_BIN_CLI)
+all: $(ROUTER_CONFIG) $(RELEASE_BIN) $(RELEASE_BIN_CLI)
 
 ################################################################################
 # Tools
@@ -91,6 +91,11 @@ TOOL_STATELESS_SERVICE := $(ROUTER_DIR_TOOLS_STATELESS_SERVICE)/service.py
 stateless-service-%:
 	$(MAKE) -C $(ROUTER_DIR_TOOLS_STATELESS_SERVICE) $*
 
+ROUTER_DIR_TOOLS_STATEFUL_SERVICE := $(ROUTER_DIR_TOOLS)/stateful_virtual_service
+TOOL_STATEFUL_SERVICE := $(ROUTER_DIR_TOOLS_STATEFUL_SERVICE)/service.py
+stateful-service-%:
+	$(MAKE) -C $(ROUTER_DIR_TOOLS_STATEFUL_SERVICE) $*
+
 ################################################################################
 # Helpers
 
@@ -103,16 +108,16 @@ version:
 
 REBAR := $(abspath ./)/rebar3
 
-$(RELEASE_BIN): $(SOURCE) $(PROTO) $(CONFIG)
+$(RELEASE_BIN): $(ROUTER_SOURCE) $(ROUTER_PROTOS) $(ROUTER_CONFIG)
 	$(REBAR) release
 
-$(RELEASE_BIN_CLI): $(SOURCE) $(PROTO) $(CONFIG)
+$(RELEASE_BIN_CLI): $(ROUTER_SOURCE) $(ROUTER_PROTOS) $(ROUTER_CONFIG)
 	$(REBAR) escriptize
 
-$(RELEASE_TEST_BIN): $(SOURCE) $(PROTO) $(CONFIG)
+$(RELEASE_TEST_BIN): $(ROUTER_SOURCE) $(ROUTER_PROTOS) $(ROUTER_CONFIG)
 	$(REBAR) as test release
 
-$(RELEASE_TEST_BIN_CLI): $(SOURCE) $(PROTO) $(CONFIG)
+$(RELEASE_TEST_BIN_CLI): $(ROUTER_SOURCE) $(ROUTER_PROTOS) $(ROUTER_CONFIG)
 	$(REBAR) as test escriptize
 
 $(RELEASE_PROD_BIN):

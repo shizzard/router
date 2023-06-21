@@ -1,0 +1,94 @@
+[doc]
+Check if router handles external unary calls for a pool of agents.
+[enddoc]
+
+[include ${ROUTER_DIR_TESTS_LUX}/__common/capture.luxinc]
+[include ${ROUTER_DIR_TESTS_LUX}/__tools/stateful-service.luxinc]
+
+[global agent-id=agent-1]
+[global agent-instance-1=f8113938-c588-4867-9683-052d8697544b]
+[global agent-instance-2=6bced72e-01b0-435d-8992-9b08dd254287]
+[global agent-instance-3=faacb9cb-01f6-4515-a846-51ecc944749c]
+
+[global request-file-init=json/init-request.json]
+[global request-file-register-agent-1=json/register-agent-1-request.json]
+[global request-file-register-agent-2=json/register-agent-2-request.json]
+[global request-file-register-agent-3=json/register-agent-3-request.json]
+[global request-file-set=json/set-request.json]
+[global response-file-set=json/set-request.response.json]
+[global request-file-get=json/get-request.json]
+[global response-file-get=json/get-request.response.json]
+
+[shell router]
+  [invoke app-start]
+
+[shell stateful-service]
+  [invoke stateful-service-start]
+
+[shell stateful-service-control-stream]
+  [invoke stateful-service-control-stream-init ${request-file-init}]
+
+[shell jq]
+  [invoke stateful-service-control-stream-init-check]
+
+## register first agent-1
+[shell stateful-service-control-stream]
+  [progress (register agent-1)]
+  [invoke stateful-service-control-stream-data ${request-file-register-agent-1}]
+
+[shell jq]
+  [invoke jq-check-file-match ${data} .event.register_agent_rs.result.status SUCCESS]
+  [invoke jq-check-file-match ${data} .event.register_agent_rs.agent_id ${agent-id}]
+  [invoke jq-check-file-match ${data} .event.register_agent_rs.agent_instance ${agent-instance-1}]
+
+## register second agent-1
+[shell stateful-service-control-stream]
+  [progress (register agent-2)]
+  [invoke stateful-service-control-stream-data ${request-file-register-agent-2}]
+
+[shell jq]
+  [invoke jq-check-file-match ${data} .event.register_agent_rs.result.status SUCCESS]
+  [invoke jq-check-file-match ${data} .event.register_agent_rs.agent_id ${agent-id}]
+  [invoke jq-check-file-match ${data} .event.register_agent_rs.agent_instance ${agent-instance-2}]
+
+## register third agent-1
+[shell stateful-service-control-stream]
+  [progress (register agent-3)]
+  [invoke stateful-service-control-stream-data ${request-file-register-agent-3}]
+
+[shell jq]
+  [invoke jq-check-file-match ${data} .event.register_agent_rs.result.status SUCCESS]
+  [invoke jq-check-file-match ${data} .event.register_agent_rs.agent_id ${agent-id}]
+  [invoke jq-check-file-match ${data} .event.register_agent_rs.agent_instance ${agent-instance-3}]
+
+## bare set request
+[shell evans]
+  [invoke grpc-request-bare ${stateful-service-method-set} ${agent-id} ${request-file-set} ${response-file-set}]
+  [progress (check response)]
+  [invoke jq-check-file-match ${response-file-set} .status.number 0]
+  [invoke jq-check-file-match ${response-file-set} .messages[0] "{}"]
+  [invoke jq-check-file-match ${response-file-set} .trailer.\"x-router-agent-id\"[0] ${agent-id}]
+  [invoke jq-check-file ${response-file-set} .trailer.\"x-router-agent-instance\"[0]]
+  ?^(${capture-uuid})
+  [global agent-instance=$1]
+  [progress (agent instance ${agent-instance})]
+
+[shell stateful-service]
+  [invoke stateful-service-log set ${agent-id} ${agent-instance} test_key 8137]
+
+[shell evans]
+
+## full get request with collected agent instance
+[shell evans]
+  [invoke grpc-request-full ${stateful-service-method-get} ${agent-id} ${agent-instance} ${request-file-get} ${response-file-get}]
+
+[shell stateful-service]
+  [invoke stateful-service-log get ${agent-id} ${agent-instance} test_key 8137]
+
+[shell evans]
+  [progress (check response)]
+  [invoke jq-check-file-match ${response-file-get} .status.number 0]
+  [invoke jq-check-file-match ${response-file-get} .messages[0].key test_key]
+  [invoke jq-check-file-match ${response-file-get} .messages[0].value 8137]
+
+[cleanup]

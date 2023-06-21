@@ -1,0 +1,9 @@
+{
+  "id": {"tag": "register-agent-1"},
+  "event": {
+    "register_agent_rq": {
+      "agent_id": "agent-1",
+      "agent_instance": "f8113938-c588-4867-9683-052d8697544b"
+    }
+  }
+}

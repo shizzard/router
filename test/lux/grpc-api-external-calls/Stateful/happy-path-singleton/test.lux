@@ -1,0 +1,62 @@
+[doc]
+Check if router handles external unary calls for singleton agents.
+[enddoc]
+
+[include ${ROUTER_DIR_TESTS_LUX}/__common/capture.luxinc]
+[include ${ROUTER_DIR_TESTS_LUX}/__tools/stateful-service.luxinc]
+
+[global agent-id=agent-1]
+[global agent-instance=f8113938-c588-4867-9683-052d8697544b]
+
+[global request-file-init=json/init-request.json]
+[global request-file-register-agent=json/register-agent-request.json]
+[global request-file-set=json/set-request.json]
+[global response-file-set=json/set-request.response.json]
+[global request-file-get=json/get-request.json]
+[global response-file-get=json/get-request.response.json]
+
+[shell router]
+  [invoke app-start]
+
+[shell stateful-service]
+  [invoke stateful-service-start]
+
+[shell stateful-service-control-stream]
+  [invoke stateful-service-control-stream-init ${request-file-init}]
+
+[shell jq]
+  [invoke stateful-service-control-stream-init-check]
+
+[shell stateful-service-control-stream]
+  [progress (register agent-1)]
+  [invoke stateful-service-control-stream-data ${request-file-register-agent}]
+
+[shell jq]
+  [invoke jq-check-file-match ${data} .event.register_agent_rs.result.status SUCCESS]
+  [invoke jq-check-file-match ${data} .event.register_agent_rs.agent_id ${agent-id}]
+  [invoke jq-check-file-match ${data} .event.register_agent_rs.agent_instance ${agent-instance}]
+
+[shell evans]
+  [invoke grpc-request-full ${stateful-service-method-set} ${agent-id} ${agent-instance} ${request-file-set} ${response-file-set}]
+
+[shell stateful-service]
+  [invoke stateful-service-log set ${agent-id} ${agent-instance} test_key 8137]
+
+[shell evans]
+  [progress (check response)]
+  [invoke jq-check-file-match ${response-file-set} .status.number 0]
+  [invoke jq-check-file-match ${response-file-set} .messages[0] "{}"]
+
+[shell evans]
+  [invoke grpc-request-full ${stateful-service-method-get} ${agent-id} ${agent-instance} ${request-file-get} ${response-file-get}]
+
+[shell stateful-service]
+  [invoke stateful-service-log get ${agent-id} ${agent-instance} test_key 8137]
+
+[shell evans]
+  [progress (check response)]
+  [invoke jq-check-file-match ${response-file-get} .status.number 0]
+  [invoke jq-check-file-match ${response-file-get} .messages[0].key test_key]
+  [invoke jq-check-file-match ${response-file-get} .messages[0].value 8137]
+
+[cleanup]

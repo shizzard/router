@@ -4,7 +4,7 @@
 -include_lib("router_log/include/router_log.hrl").
 -include_lib("typr/include/typr_specs_supervisor.hrl").
 
--export([start_handler/2, start_link/0, init/1]).
+-export([start_handler/3, start_link/0, init/1]).
 
 
 
@@ -14,15 +14,16 @@
 
 -spec start_handler(
   Definition :: router_grpc:definition_external(),
-  Req :: cowboy_req:req()
+  Req :: cowboy_req:req(),
+  Ctx :: router_grpc_external_context:t()
 ) ->
   typr:generic_return(
     OkRet :: pid(),
     ErrorRet :: no_workers_available
   ).
 
-start_handler(Definition, Req) ->
-  supervisor:start_child(?MODULE, [Definition, Req]).
+start_handler(Definition, Req, Ctx) ->
+  supervisor:start_child(?MODULE, [Definition, Req, Ctx]).
 
 
 

@@ -541,7 +541,7 @@ control_stream_event_handle_register_service(Type, Package, Name, Methods, Cmp, 
 
 
 control_stream_event_handle_start_session(S0) ->
-  SessionId = list_to_binary(uuid:uuid_to_string(uuid:get_v4_urandom())),
+  SessionId = uuid:uuid_to_string(uuid:get_v4_urandom(), binary_standard),
   {ok, HPid} = router_grpc_internal_stream_sup:start_handler(
     SessionId, S0#state.definition_external, S0#state.conn_req
   ),

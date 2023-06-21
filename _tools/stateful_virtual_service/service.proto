@@ -1,0 +1,21 @@
+syntax = "proto3";
+package lg.service.example;
+
+message GetRq {
+  string key = 1;
+}
+message GetRs {
+  string key = 1;
+  int32 value = 2;
+}
+
+message SetRq {
+  string key = 1;
+  int32 value = 2;
+}
+message SetRs {}
+
+service StatefulVirtualService {
+  rpc Get(GetRq) returns (GetRs);
+  rpc Set(SetRq) returns (SetRs);
+}

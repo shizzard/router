@@ -3,14 +3,14 @@
 
 -include_lib("router_grpc/include/router_grpc.hrl").
 -include_lib("router_grpc/include/router_grpc_service_registry.hrl").
+-include_lib("router_grpc/include/router_grpc_external_context.hrl").
 
 -export([init/2, data/3]).
 
 -record(router_grpc_external_state, {
   handler_pid :: pid(),
   definition :: router_grpc:definition_external(),
-  agent_id :: router_grpc:agent_id() | undefined,
-  agent_instance :: router_grpc:agent_instance() | undefined,
+  ctx :: router_grpc_external_context:t(),
   req :: cowboy_req:req()
 }).
 -type state() :: #router_grpc_external_state{}.
@@ -30,7 +30,12 @@
 init(Definitions, #{headers := Headers} = Req) ->
   AgentId = maps:get(?router_grpc_header_agent_id, Headers, undefined),
   AgentInstance = maps:get(?router_grpc_header_agent_instance, Headers, undefined),
-  init_impl(Definitions, Req, AgentId, AgentInstance).
+  RequestId = maps:get(?router_grpc_header_agent_instance, Headers,
+    uuid:uuid_to_string(uuid:get_v4_urandom(), binary_standard)),
+  Ctx = #router_grpc_external_context{
+    agent_id = AgentId, agent_instance = AgentInstance, request_id = RequestId
+  },
+  init_impl(Definitions, Req, Ctx).
 
 
 
@@ -64,52 +69,73 @@ data(IsFin, Data, #router_grpc_external_state{handler_pid = Pid} = S0) ->
 -spec init_impl(
   Definitions :: [router_grpc:definition_external()],
   Req :: cowboy_req:req(),
-  AgentId :: router_grpc:agent_id() | undefined,
-  AgentInstance :: router_grpc:agent_instance() | undefined
+  Ctx :: router_grpc_external_context:t()
 ) ->
   Ret :: {HS :: state(), Definition :: router_grpc:definition_external()}.
 
-init_impl([#router_grpc_service_registry_definition_external{type = stateless} | _] = Definitions, Req, undefined, undefined) ->
+init_impl(
+  [#router_grpc_service_registry_definition_external{type = stateless} | _] = Definitions, Req,
+  #router_grpc_external_context{agent_id = undefined, agent_instance = undefined} = Ctx0
+) ->
+  %% Both agent id and agent instance are not set, that's an error condition
   Definition = lists:nth(quickrand:uniform(length(Definitions)), Definitions),
-  {ok, HPid} = router_grpc_external_stream_sup:start_handler(Definition, Req),
+  {ok, HPid} = router_grpc_external_stream_sup:start_handler(Definition, Req, Ctx0),
   {#router_grpc_external_state{
-    handler_pid = HPid, definition = Definition, req = Req
+    handler_pid = HPid, definition = Definition, req = Req, ctx = Ctx0
   }, Definition};
 
-init_impl([#router_grpc_service_registry_definition_external{type = stateful} = AnyDefinition | _] = Definitions, Req, AgentId, undefined) ->
+init_impl(
+  [#router_grpc_service_registry_definition_external{type = stateful} = AnyDefinition | _] = Definitions, Req,
+  #router_grpc_external_context{agent_id = AgentId, agent_instance = undefined} = Ctx0
+) ->
+  %% Bare agent call, as agent instance is not set
   case router_hashring_node:lookup_agent(
     AnyDefinition#router_grpc_service_registry_definition_external.fq_service_name,
     AgentId
   ) of
     {ok, DefinitionsPL} ->
+      %% Found a list of corresponding agents (e.g. matching agent id with different agent instances)
+      %% Choose a random one and proceed
       {AgentInstance, Definition} = lists:nth(quickrand:uniform(length(DefinitionsPL)), DefinitionsPL),
-      {ok, HPid} = router_grpc_external_stream_sup:start_handler(Definition, Req),
+      Ctx1 = Ctx0#router_grpc_external_context{agent_instance = AgentInstance},
+      {ok, HPid} = router_grpc_external_stream_sup:start_handler(Definition, Req, Ctx1),
       {#router_grpc_external_state{
-        handler_pid = HPid, definition = Definition, agent_id = AgentId, agent_instance = AgentInstance, req = Req
+        handler_pid = HPid, definition = Definition, ctx = Ctx1, req = Req
       }, Definition};
     {error, undefined} ->
-      AgentInstance = router_grpc:gen_agent_instance(),
+      %% No matching agent found
+      %% Choose a random stateful virtual service instance and proceed with generated agent instance
       Definition = lists:nth(quickrand:uniform(length(Definitions)), Definitions),
-      {ok, HPid} = router_grpc_external_stream_sup:start_handler(Definition, Req),
+      AgentInstance = router_grpc:gen_agent_instance(),
+      Ctx1 = Ctx0#router_grpc_external_context{agent_instance = AgentInstance},
+      {ok, HPid} = router_grpc_external_stream_sup:start_handler(Definition, Req, Ctx1),
       {#router_grpc_external_state{
-        handler_pid = HPid, definition = Definition, agent_id = AgentId, agent_instance = AgentInstance, req = Req
+        handler_pid = HPid, definition = Definition, ctx = Ctx1, req = Req
       }, Definition}
   end;
 
-init_impl([#router_grpc_service_registry_definition_external{type = stateful} = AnyDefinition | _] = Definitions, Req, AgentId, AgentInstance) ->
+init_impl(
+  [#router_grpc_service_registry_definition_external{type = stateful} = AnyDefinition | _] = Definitions, Req,
+  #router_grpc_external_context{agent_id = AgentId, agent_instance = AgentInstance} = Ctx0
+) ->
+  %% Full agent call
   case router_hashring_node:lookup_agent(
     AnyDefinition#router_grpc_service_registry_definition_external.fq_service_name,
     AgentId, AgentInstance
   ) of
     {ok, Definition} ->
-      {ok, HPid} = router_grpc_external_stream_sup:start_handler(Definition, Req),
+      %% Agent found (e.g. both agent id and agent instance matched)
+      %% Proceed with the chosen agent
+      {ok, HPid} = router_grpc_external_stream_sup:start_handler(Definition, Req, Ctx0),
       {#router_grpc_external_state{
-        handler_pid = HPid, definition = Definition, agent_id = AgentId, agent_instance = AgentInstance, req = Req
+        handler_pid = HPid, definition = Definition, ctx = Ctx0, req = Req
       }, Definition};
     {error, undefined} ->
+      %% No matching agent found
+      %% Choose a random stateful virtual service and proceed with the specified agent id and instance
       Definition = lists:nth(quickrand:uniform(length(Definitions)), Definitions),
-      {ok, HPid} = router_grpc_external_stream_sup:start_handler(Definition, Req),
+      {ok, HPid} = router_grpc_external_stream_sup:start_handler(Definition, Req, Ctx0),
       {#router_grpc_external_state{
-        handler_pid = HPid, definition = Definition, agent_id = AgentId, agent_instance = AgentInstance, req = Req
+        handler_pid = HPid, definition = Definition, ctx = Ctx0, req = Req
       }, Definition}
   end.

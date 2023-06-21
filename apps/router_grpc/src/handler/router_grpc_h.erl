@@ -8,7 +8,6 @@
 -export([init/3, data/4, info/3, terminate/3, early_error/5]).
 
 -record(state, {
-  request_id = uuid:uuid_to_string(uuid:get_v4_urandom(), binary_standard) :: binary(),
   stream_id :: cowboy_stream:streamid() | undefined,
   req :: cowboy_req:req() | undefined,
   handler_state :: term(),
@@ -395,14 +394,10 @@ wait_commands(S0) -> {[], S0}.
 
 response_headers(#state{
   is_server_header_sent = false,
-  imposed_headers = Headers,
-  request_id = RequestId
+  imposed_headers = Headers
 } = S0) ->
   {
-    [{headers, <<"200">>, maps:merge((?default_headers)#{
-        ?router_grpc_header_request_id => RequestId
-      },Headers
-    )}],
+    [{headers, <<"200">>, maps:merge(?default_headers, Headers)}],
     S0#state{is_server_header_sent = true}
   };
 
@@ -420,14 +415,11 @@ response_trailers(GrpcCode, GrpcMessage, S0) ->
 
 
 
-response_trailers(GrpcCode, GrpcMessage, Trailers, #state{
-  request_id = RequestId
-} = S0) ->
+response_trailers(GrpcCode, GrpcMessage, Trailers, S0) ->
   {
     [{trailers, maps:merge(Trailers, #{
       ?grpc_header_code => grpc_code_to_binary(GrpcCode),
-      ?grpc_header_message => GrpcMessage,
-      ?router_grpc_header_request_id => RequestId
+      ?grpc_header_message => GrpcMessage
     })}],
     S0
   }.

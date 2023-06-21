@@ -1,0 +1,79 @@
+[include ${ROUTER_DIR_TESTS_LUX}/__common/common.luxinc]
+[include ${ROUTER_DIR_TESTS_LUX}/__common/grpc.luxinc]
+[include ${ROUTER_DIR_TESTS_LUX}/__common/jq.luxinc]
+[include ${ROUTER_DIR_TESTS_LUX}/__router/registry-service.luxinc]
+
+[global stateful-service-method-get=Get]
+[global stateful-service-method-set=Set]
+
+[macro stateful-service-start]
+  [progress (stateful service start)]
+  !make -C ${ROUTER_DIR_TOOLS_STATEFUL_SERVICE} run
+  ??INFO:root:port:${STATEFUL_SERVICE_PORT}
+[endmacro]
+
+[macro stateful-service-log operation agent-id agent-instance key value]
+  [progress (stateful service log check ${operation})]
+  ??INFO:root:${operation}
+  ??INFO:root:agent:${agent-id}:${agent-instance}
+  ??INFO:root:key:${key}
+  ??INFO:root:value:${value}
+[endmacro]
+
+[macro stateful-service-control-stream-init request-file-init]
+  [progress (stateful service control stream)]
+  [invoke grpcc-start ${grpc-service-name} ${grpc-method-control-stream} json ""]
+  [progress (stateful service init)]
+  [invoke grpcc-send-data ${request-file-init}]
+  [invoke grpcc-recv-headers]
+  [global headers=${out}]
+  [invoke grpcc-recv-data]
+  [global data=${out}]
+[endmacro]
+
+[macro stateful-service-control-stream-init-check]
+  [progress (check response)]
+  [invoke jq-check-file-match ${headers} .headers.\"content-type\" "application/grpc+proto"]
+  [invoke jq-check-file-match ${headers} .headers.\"grpc-user-agent\" "router/"]
+  [invoke jq-check-file-match ${headers} .status 200]
+  [invoke jq-check-file-match ${data} .event.init_rs.result.status SUCCESS]
+[endmacro]
+
+[macro stateful-service-control-stream-data request-file]
+  [invoke grpcc-send-data ${request-file}]
+  [invoke grpcc-recv-data]
+  [global data=${out}]
+[endmacro]
+
+[macro grpc-request-bare method agent-id request-file response-file]
+  [progress (bare grpc request lg.service.example.StatefulVirtualService.${method})]
+  !${TOOL_EVANS} \
+  --path ${ROUTER_DIR_TOOLS_STATEFUL_SERVICE} \
+  --proto service.proto \
+  --host localhost \
+  --port ${ROUTER_APP_GRPC_LISTENER_PORT} \
+  cli call lg.service.example.StatefulVirtualService.${method} \
+  --header "x-router-agent-id=${agent-id}" \
+  --file ${request-file} \
+  --output json \
+  --enrich \
+  > ${response-file}
+  [invoke check-ok]
+[endmacro]
+
+[macro grpc-request-full method agent-id agent-instance request-file response-file]
+  [progress (full grpc request lg.service.example.StatefulVirtualService.${method})]
+  !${TOOL_EVANS} \
+  --path ${ROUTER_DIR_TOOLS_STATEFUL_SERVICE} \
+  --proto service.proto \
+  --host localhost \
+  --port ${ROUTER_APP_GRPC_LISTENER_PORT} \
+  cli call lg.service.example.StatefulVirtualService.${method} \
+  --header "x-router-agent-id=${agent-id}" \
+  --header "x-router-agent-instance=${agent-instance}" \
+  --file ${request-file} \
+  --output json \
+  --enrich \
+  > ${response-file}
+  [invoke check-ok]
+[endmacro]

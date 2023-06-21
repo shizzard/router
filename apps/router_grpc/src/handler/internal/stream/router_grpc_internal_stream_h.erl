@@ -205,7 +205,7 @@ handle_call(?msg_recover(SessionId, _ConnPid), _GenReplyTo, #state{session_id = 
 handle_call(?msg_register_agent(Fqsn, AgentId, undefined), _GenReplyTo, #state{
   definition_external = Definition
 } = S0) ->
-  AgentInstance = list_to_binary(uuid:uuid_to_string(uuid:get_v4_urandom())),
+  AgentInstance = uuid:uuid_to_string(uuid:get_v4_urandom(), binary_standard),
   handle_call_register_agent(Fqsn, AgentId, AgentInstance, Definition, S0);
 
 handle_call(?msg_register_agent(Fqsn, AgentId, AgentInstance), _GenReplyTo, #state{
@@ -225,7 +225,7 @@ handle_call(Unexpected, _GenReplyTo, S0) ->
 handle_cast(?msg_conflict(_Fqsn, AgentId, AgentInstance), S0) ->
   % fix
   router_grpc_h:push_internal_pdu(#'lg.service.router.ControlStreamEvent'{
-    id = #'lg.core.trait.Id'{tag = list_to_binary(uuid:uuid_to_string(uuid:get_v4_urandom()))},
+    id = #'lg.core.trait.Id'{tag = uuid:uuid_to_string(uuid:get_v4_urandom(), binary_standard)},
     event = {conflict_event, #'lg.service.router.ControlStreamEvent.ConflictEvent'{
       agent_id = AgentId, agent_instance = AgentInstance,
       reason = ?control_stream_conflict_event_reason_preemptive

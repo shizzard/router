@@ -98,7 +98,7 @@ message Result {
       Internal Server Error.
       Related information might be found in the error_meta field.
     */
-    ERROR_ISE = 1;
+    ERROR_ISE = 2;
 
     /*
       Operation failed due to invalid argument.

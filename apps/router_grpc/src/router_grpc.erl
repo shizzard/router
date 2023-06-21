@@ -26,10 +26,11 @@
 -type endpoint_port() :: 0..65535.
 -type agent_id() :: binary().
 -type agent_instance() :: binary().
+-type request_id() :: binary().
 
 -export_type([
   service_type/0, service_package/0, service_name/0, fq_service_name/0, fq_method_name/0, method_name/0,
-  service_maintenance/0, endpoint_host/0, endpoint_port/0, agent_id/0, agent_instance/0
+  service_maintenance/0, endpoint_host/0, endpoint_port/0, agent_id/0, agent_instance/0, request_id/0
 ]).
 
 -type definition() :: definition_internal() | definition_external().
@@ -172,7 +173,7 @@ encode_pdu(Pdu, #router_grpc_service_registry_definition_internal{definition = D
   Ret :: agent_instance().
 
 gen_agent_instance() ->
-  list_to_binary(uuid:uuid_to_string(uuid:get_v4_urandom())).
+  uuid:uuid_to_string(uuid:get_v4_urandom(), binary_standard).
 
 
 

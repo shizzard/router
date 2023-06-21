@@ -28,18 +28,16 @@ class StatelessService(service_pb2_grpc.StatelessVirtualServiceServicer):
             yield service_pb2.RandomRs(random_value=random_str)
 
 def serve():
-    default_port = os.getenv('STATELESS_SERVICE_PORT', '8137')
+    default_port = os.getenv('STATELESS_SERVICE_PORT', '8237')
     parser = argparse.ArgumentParser(description="A Stateless Service")
-    parser.add_argument("--port", default=default_port, type=int)
+    parser.add_argument("--port", default=default_port, type=int, help='port number')
     args = parser.parse_args()
 
     # Configure logging
     logging.basicConfig(level=logging.INFO)
 
     server = grpc.server(futures.ThreadPoolExecutor(max_workers=10))
-    service_pb2_grpc.add_StatelessVirtualServiceServicer_to_server(
-        StatelessService(), server
-    )
+    service_pb2_grpc.add_StatelessVirtualServiceServicer_to_server(StatelessService(), server)
     server.add_insecure_port('[::]:%s' % args.port)
     server.start()
     logging.info("port:%s", args.port)
