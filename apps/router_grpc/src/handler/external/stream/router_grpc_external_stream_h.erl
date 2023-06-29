@@ -77,6 +77,13 @@ init_send_request(#state{
 } = S0) ->
   %% dirty
   [<<>>, _Fqsn, Method] = binary:split(Path, <<"/">>, [global]),
+  ?l_debug(#{text => "External virtual service call init", what => init, details => #{
+    service => Definition#router_grpc_service_registry_definition_external.fq_service_name,
+    method => Method,
+    worker_pid => WorkerPid,
+    host => Definition#router_grpc_service_registry_definition_external.host,
+    port => Definition#router_grpc_service_registry_definition_external.port
+  }}),
   case router_grpc_client:grpc_request(
     WorkerPid,
     self(),
@@ -85,6 +92,14 @@ init_send_request(#state{
     maps:merge(Headers, router_grpc_external_context:to_headers_map(Ctx))
   ) of
     {ok, StreamRef} ->
+      ?l_debug(#{text => "External virtual service call init succeed", what => init, details => #{
+        service => Definition#router_grpc_service_registry_definition_external.fq_service_name,
+        method => Method,
+        worker_pid => WorkerPid,
+        stream_ref => StreamRef,
+        host => Definition#router_grpc_service_registry_definition_external.host,
+        port => Definition#router_grpc_service_registry_definition_external.port
+      }}),
       {ok, S0#state{stream_ref = StreamRef}};
     {error, not_ready} ->
       {stop, worker_not_ready}

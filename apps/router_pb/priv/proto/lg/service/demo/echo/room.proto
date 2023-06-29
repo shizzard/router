@@ -1,0 +1,34 @@
+syntax = "proto3";
+
+package lg.service.demo.echo;
+
+import "lg/core/grpc.proto";
+import "lg/core/trait.proto";
+import "lg/core/network.proto";
+
+
+
+/*
+
+*/
+message GetStatsRq {
+  string name = 1;
+}
+
+
+
+/*
+
+*/
+message GetStatsRs {
+  int32 participants_n = 1;
+}
+
+
+
+/*
+
+*/
+service RoomService {
+  rpc GetStats(GetStatsRq) returns (GetStatsRs);
+}

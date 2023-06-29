@@ -1,7 +1,7 @@
--module('router_grpc_sup').
+-module('echo_grpc_sup').
 -behaviour(supervisor).
 
--include_lib("router_log/include/router_log.hrl").
+-include_lib("echo_log/include/echo_log.hrl").
 -include_lib("typr/include/typr_specs_supervisor.hrl").
 
 -export([start_link/0, init/1]).
@@ -26,45 +26,30 @@ start_link() ->
 
 
 init([]) ->
-  router_log:component(router_grpc),
+  echo_log:component(echo_grpc),
 
   ok = init_prometheus_metrics(),
-  {ok, Port} = router_config:get(router_grpc, [listener, port]),
+  {ok, Port} = echo_config:get(echo_grpc, [listener, port]),
+  {ok, RouterHost} = echo_config:get(echo_grpc, [client, host]),
+  {ok, RouterPort} = echo_config:get(echo_grpc, [client, port]),
   ok = start_cowboy(Port),
   ?l_info(#{text => "gRPC listener started", what => init, result => ok, details => #{port => Port}}),
 
   SupFlags = #{strategy => one_for_one, intensity => 10, period => 10},
   Children = [
     #{
-      id => router_grpc_client_pool_master_sup,
-      start => {router_grpc_client_pool_master_sup, start_link, []},
-      restart => permanent,
-      shutdown => 5000,
-      type => supervisor
-    },
-    #{
-      id => router_grpc_service_registry,
-      start => {router_grpc_service_registry, start_link, [
-        [registry_definitions],
-        #{'lg.service.router.RegistryService' => router_grpc_internal_registry}
-      ]},
+      id => echo_grpc_client,
+      start => {echo_grpc_client, start_link, [RouterHost, RouterPort]},
       restart => permanent,
       shutdown => 5000,
       type => worker
     },
     #{
-      id => router_grpc_internal_stream_sup,
-      start => {router_grpc_internal_stream_sup, start_link, []},
+      id => echo_grpc_client_control_stream,
+      start => {echo_grpc_client_control_stream, start_link, []},
       restart => permanent,
-      shutdown => infinity,
-      type => supervisor
-    },
-    #{
-      id => router_grpc_external_stream_sup,
-      start => {router_grpc_external_stream_sup, start_link, []},
-      restart => permanent,
-      shutdown => infinity,
-      type => supervisor
+      shutdown => 5000,
+      type => worker
     }
   ],
   {ok, {SupFlags, Children}}.
@@ -79,11 +64,11 @@ init([]) ->
   typr:ok_return().
 
 start_cowboy(Port) ->
-  case cowboy:start_clear(router_grpc_listener,
+  case cowboy:start_clear(echo_grpc_listener,
     [{port, Port}],
     #{
       env => #{dispatch => cowboy_router:compile([])},
-      stream_handlers => [router_grpc_h],
+      stream_handlers => [echo_grpc_h],
       protocols => [http2],
       idle_timeout => infinity,
       inactivity_timeout => infinity
@@ -100,7 +85,7 @@ start_cowboy(Port) ->
   typr:generic_return(ErrorRet :: not_found).
 
 stop_cowboy() ->
-  cowboy:stop_listener(router_grpc_listener).
+  cowboy:stop_listener(echo_grpc_listener).
 
 
 

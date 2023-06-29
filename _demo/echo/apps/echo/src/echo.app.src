@@ -1,0 +1,8 @@
+{application, 'echo', [
+  {description, "gRPC microservices echo application"},
+  {vsn, "0.1.0"},
+  {registered, []},
+  {mod, {'echo_app', []}},
+  {applications, [kernel, stdlib, gproc, echo_log]},
+  {env,[]}
+]}.

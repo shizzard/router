@@ -20,6 +20,7 @@ ROUTER_DIR_CONFIG := $(ROUTER_DIR_ROOT)/config
 ROUTER_DIR_TESTS := $(ROUTER_DIR_ROOT)/test
 ROUTER_DIR_PLT := $(ROUTER_DIR_ROOT)/.plt
 ROUTER_DIR_BUILD := $(ROUTER_DIR_ROOT)/_build
+ROUTER_DIR_DEMO := $(ROUTER_DIR_ROOT)/_demo
 ROUTER_DIR_TOOLS := $(ROUTER_DIR_ROOT)/_tools
 ROUTER_DIR_LOGS := $(ROUTER_DIR_ROOT)/_logs
 ROUTER_DIR_PROTO := $(ROUTER_DIR_APPS)/router_pb/priv/proto
@@ -150,7 +151,7 @@ run: $(RELEASE_BIN)
 .PHONY: logtail
 ROUTER_LOGTAIL_LEVEL ?= debug
 logtail:
-	tail -F $(ROUTER_DIR_LOGS)/lgr_$(ROUTER_LOGTAIL_LEVEL).log.1 | grcat .grc-flatlog.conf
+	tail -F $(ROUTER_DIR_LOGS)/$(ROUTER_VMARGS_SNAME)_$(ROUTER_LOGTAIL_LEVEL).log.1 | grcat .grc-flatlog.conf
 
 ################################################################################
 # Test
@@ -211,7 +212,7 @@ lux-tests: $(RELEASE_TEST_BIN) $(RELEASE_TEST_BIN_CLI) $(TOOL_LUX) $(TOOL_EVANS)
 
 # quite dirty, but useful for debugging tests
 .PHONY: lux-logtail
-TEST_CASES_LOGFILES := $(foreach TEST_CASE, $(TEST_CASES), $(addsuffix /router_logs/test/lgr_debug.log.1, $(TEST_CASE)))
+TEST_CASES_LOGFILES := $(foreach TEST_CASE, $(TEST_CASES), $(addsuffix /router_logs/test/$(ROUTER_VMARGS_SNAME)_$(ROUTER_LOGTAIL_LEVEL).log.1, $(TEST_CASE)))
 lux-logtail:
 	tail -F $(TEST_CASES_LOGFILES) | grcat .grc-flatlog.conf
 
@@ -238,7 +239,40 @@ clean: common-clean lux-clean
 	$(REBAR) clean -a
 
 .PHONY: dist-clean
-dist-clean: clean
+dist-clean:
 	$(REBAR) unlock --all
 	rm -rf _build
 	rm -rf $(ROUTER_DIR_TOOLS_LUX) $(ROUTER_DIR_TOOLS_EVANS)
+
+################################################################################
+# Demo
+
+ROOM_NAME ?= room-1
+
+.PHONY: demo-echo-room-create
+demo-echo-room-create:
+	echo '{"name":"$(ROOM_NAME)"}' | \
+	$(TOOL_EVANS) \
+	--path $(ROUTER_DIR_PROTO) \
+	--proto lg/service/demo/echo/lobby.proto \
+	--host localhost \
+	--port $(ROUTER_APP_GRPC_LISTENER_PORT) \
+	cli c SpawnRoom
+
+.PHONY: demo-echo-room-stats
+demo-echo-room-stats:
+	echo '{"name":"$(ROOM_NAME)"}' | \
+	$(TOOL_EVANS) \
+	--path $(ROUTER_DIR_PROTO) \
+	--proto lg/service/demo/echo/room.proto \
+	--host localhost \
+	--port $(ROUTER_APP_GRPC_LISTENER_PORT) \
+	cli c GetStats
+
+ROUTER_DIR_DEMO_ECHO := $(ROUTER_DIR_DEMO)/echo
+demo-echo-%: all
+	$(MAKE) -C $(ROUTER_DIR_DEMO_ECHO) $*
+
+ROUTER_DIR_DEMO_RTGW := $(ROUTER_DIR_DEMO)/rtgw
+demo-rtgw-%: all
+	$(MAKE) -C $(ROUTER_DIR_DEMO_RTGW) $*

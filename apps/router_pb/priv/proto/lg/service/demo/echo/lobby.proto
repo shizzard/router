@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package lg.service.demo.echo;
+
+import "lg/core/grpc.proto";
+import "lg/core/trait.proto";
+import "lg/core/network.proto";
+
+
+
+/*
+
+*/
+message SpawnRoomRq {
+  string name = 1;
+}
+
+
+
+/*
+
+*/
+message SpawnRoomRs {
+  lg.core.network.Endpoint endpoint = 1;
+  string name = 2;
+  string secret = 3;
+}
+
+
+
+/*
+
+*/
+service LobbyService {
+  rpc SpawnRoom(SpawnRoomRq) returns (SpawnRoomRs);
+}

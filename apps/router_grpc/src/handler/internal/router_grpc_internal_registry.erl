@@ -109,8 +109,8 @@ register_virtual_service_impl(Type, Package, Name, Methods, Cmp, MaintenanceMode
   case router_grpc_service_registry:register(Type, Package, Name, Methods, Cmp, MaintenanceMode, Host, Port) of
     {ok, _Definition} ->
       ?l_debug(#{
-        text => "Virtual service registered", what => register_virtual_service,
-        result => ok
+        text => "Virtual service registered", what => register_virtual_service, result => ok,
+        details => #{type => Type, package => Package, name => Name}
       }),
       {ok, {reply_fin, #'lg.service.router.RegisterVirtualServiceRs'{}}, S0};
     {error, InvalidFields} ->

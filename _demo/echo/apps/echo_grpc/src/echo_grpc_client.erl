@@ -1,13 +1,11 @@
--module(router_grpc_client).
+-module(echo_grpc_client).
 -behaviour(gen_statem).
 
--include_lib("router_log/include/router_log.hrl").
--include_lib("router_grpc/include/router_grpc.hrl").
--include_lib("router_grpc/include/router_grpc_client.hrl").
--include("router_grpc_service_registry.hrl").
+-include_lib("echo_grpc/include/echo_grpc.hrl").
+-include_lib("echo_grpc/include/echo_grpc_client.hrl").
 
 -export([is_ready/1, await_ready/2, grpc_request/5, grpc_data/3, grpc_data/4, grpc_terminate/2]).
--export([start_link/1, start_link/2, init/1, callback_mode/0, handle_event/4]).
+-export([start_link/2, init/1, callback_mode/0, handle_event/4]).
 
 -record(caller, {
   pid :: pid(),
@@ -47,9 +45,7 @@
 
 -define(msg_gun_up(ConnPid, Protocol),
   {gun_up, ConnPid, Protocol}).
--define(msg_gun_down(ConnPid, Protocol, Reason, KilledStreams),
-  {gun_down, ConnPid, Protocol, Reason, KilledStreams}).
--define(msg_gun_down_unprocessed(ConnPid, Protocol, Reason, KilledStreams, UnprocessedStreams),
+-define(msg_gun_down(ConnPid, Protocol, Reason, KilledStreams, UnprocessedStreams),
   {gun_down, ConnPid, Protocol, Reason, KilledStreams, UnprocessedStreams}).
 -define(msg_gun_upgrade(ConnPid, StreamRef, Protocols, Headers),
   {gun_upgrade, ConnPid, StreamRef, Protocols, Headers}).
@@ -113,7 +109,7 @@ is_ready(Pid) ->
 await_ready(_ConnPid, N) when N =< 0 -> error;
 
 await_ready(ConnPid, Timeout) ->
-  case router_grpc_client:is_ready(ConnPid) of
+  case echo_grpc_client:is_ready(ConnPid) of
     {error, _} -> error;
     {ok, true} -> ok;
     {ok, false} ->
@@ -189,33 +185,16 @@ grpc_terminate(Pid, StreamRef) ->
   typr:ok_return(OkRet :: pid()).
 
 start_link(Host, Port) ->
-  gen_statem:start_link(?MODULE, [Host, Port], []).
+  gen_statem:start_link({local, ?MODULE}, ?MODULE, {Host, Port}, []).
 
 
 
--spec start_link(
-  Definition :: router_grpc:definition_external()
-) ->
-  typr:ok_return(OkRet :: pid()).
-
-start_link(Definition) ->
-  gen_statem:start_link(?MODULE, [Definition], []).
-
-
-
--spec init([term()]) ->
+-spec init({Host :: binary(), Port :: pos_integer()}) ->
   {ok, FsmState :: fsm_state(), S0 :: state(), Action :: gen_statem:action()}.
 
-init([Definition]) ->
-  {ok, ?fsm_state_on_init(), #state{
-    host = erlang:binary_to_list(Definition#router_grpc_service_registry_definition_external.host),
-    port = Definition#router_grpc_service_registry_definition_external.port
-  }, {next_event, state_timeout, ?msg_gun_connect()}};
-
-init([Host, Port]) ->
-  {ok, ?fsm_state_on_init(), #state{
-    host = Host, port = Port
-  }, {next_event, state_timeout, ?msg_gun_connect()}}.
+init({Host, Port}) ->
+  echo_log:component(echo_grpc_client),
+  {ok, ?fsm_state_on_init(), #state{host = Host, port = Port}, {next_event, state_timeout, ?msg_gun_connect()}}.
 
 
 
@@ -242,22 +221,13 @@ handle_event(state_timeout, ?msg_gun_connect(), ?fsm_state_on_init(), S0) ->
 handle_event(info, ?msg_gun_up(ConnPid, http2), ?fsm_state_on_gun_connect(), #state{conn_pid = ConnPid} = S0) ->
   {next_state, ?fsm_state_on_gun_up(), S0};
 
-%% Connection lost; notify clients and terminate;
-%% For some reason gun actually sends invalid (according to documentation) down
-%% message, missing either killed or unprocessed streams; I assume this happens
-%% when there are no streams in-fly at the moment.
-handle_event(info, ?msg_gun_down(ConnPid, http2, Reason, KilledStreams), State, S0) ->
-  handle_event(info, ?msg_gun_down_unprocessed(ConnPid, http2, Reason, KilledStreams, []), State, S0);
-
+%% Connection lost; notify clients and terminate
 handle_event(
   info,
-  ?msg_gun_down_unprocessed(ConnPid, http2, Reason, KilledStreams, UnprocessedStreams),
+  ?msg_gun_down(ConnPid, http2, _Reason, KilledStreams, UnprocessedStreams),
   _State,
   #state{conn_pid = ConnPid, callers_index = CI}
 ) ->
-  ?l_warning(#{text => "gRPC client worker got gun down", what => grpc_gun_down, details => #{
-    reason => Reason
-  }}),
   maps:foreach(fun(StreamRef, #caller{pid = Pid}) ->
     case lists:member(StreamRef, KilledStreams)  of
       true -> Pid ! ?grpc_event_stream_killed(StreamRef);
@@ -270,22 +240,11 @@ handle_event(
   {stop, disconnected};
 
 %% Stream-level error; notify client, terminate and remove the stream and continue
-handle_event(info, ?msg_gun_error(ConnPid, StreamRef, Reason), _State, #state{
+handle_event(info, ?msg_gun_error(ConnPid, StreamRef, _Reason), _State, #state{
   conn_pid = ConnPid, callers_index = CI0
 } = S0) ->
-  ?l_warning(#{text => "gRPC client worker got gun error", what => grpc_gun_error, details => #{
-    reason => Reason
-  }}),
   case callers_index_get(StreamRef, CI0) of
-    undefined ->
-      ?l_warning(#{text => "gRPC client worker ignoring gun error", what => grpc_gun_error, details => #{
-        stream_ref => StreamRef,
-        reason => Reason,
-        host => S0#state.host,
-        port => S0#state.port,
-        conn_pid => S0#state.conn_pid
-      }}),
-      keep_state_and_data;
+    undefined -> keep_state_and_data;
     #caller{pid = Pid} ->
       Pid ! ?grpc_event_stream_killed(StreamRef),
       ok = gun:cancel(ConnPid, StreamRef),
@@ -293,10 +252,7 @@ handle_event(info, ?msg_gun_error(ConnPid, StreamRef, Reason), _State, #state{
   end;
 
 %% Connection-level error; notify clients and terminate
-handle_event(info, ?msg_gun_error(ConnPid, Reason), _State, #state{conn_pid = ConnPid, callers_index = CI} = _S0) ->
-  ?l_warning(#{text => "gRPC client worker got gun connection error", what => grpc_gun_down, details => #{
-    reason => Reason
-  }}),
+handle_event(info, ?msg_gun_error(ConnPid, _Reason), _State, #state{conn_pid = ConnPid, callers_index = CI} = _S0) ->
   maps:foreach(fun(StreamRef, #caller{pid = Pid}) ->
     Pid ! ?grpc_event_connection_down(StreamRef)
   end, CI#callers_index.stream_ref_index),
@@ -306,24 +262,9 @@ handle_event(info, ?msg_gun_error(ConnPid, Reason), _State, #state{conn_pid = Co
 handle_event(info, ?msg_gun_response(ConnPid, StreamRef, Fin, Status, Headers), _State, #state{
   conn_pid = ConnPid, callers_index = CI0
 } = S0) ->
-  ?l_warning(#{text => "gRPC client worker got gun response", what => grpc_gun_response, details => #{
-    stream_ref => StreamRef,
-    fin => Fin, headers => Headers,
-    host => S0#state.host,
-    port => S0#state.port,
-    conn_pid => S0#state.conn_pid
-  }}),
-  IsFin = router_grpc:fin_to_bool(Fin),
+  IsFin = echo_grpc:fin_to_bool(Fin),
   case callers_index_get(StreamRef, CI0) of
-    undefined ->
-      ?l_warning(#{text => "gRPC client worker ignoring gun response", what => grpc_gun_response, details => #{
-        stream_ref => StreamRef,
-        fin => Fin, headers => Headers,
-        host => S0#state.host,
-        port => S0#state.port,
-        conn_pid => S0#state.conn_pid
-      }}),
-      ok;
+    undefined -> ok;
     #caller{pid = Pid} ->
       Pid ! ?grpc_event_response(StreamRef, IsFin, Status, maps:from_list(Headers))
   end,
@@ -338,24 +279,9 @@ handle_event(info, ?msg_gun_response(ConnPid, StreamRef, Fin, Status, Headers), 
 handle_event(info, ?msg_gun_data(ConnPid, StreamRef, Fin, <<0:1/unsigned-integer-unit:8, Len:4/unsigned-integer-unit:8, Data:Len/binary-unit:8>>), _State, #state{
   conn_pid = ConnPid, callers_index = CI0
 } = S0) ->
-  ?l_warning(#{text => "gRPC client worker got response data", what => grpc_gun_response, details => #{
-    stream_ref => StreamRef,
-    fin => Fin,
-    host => S0#state.host,
-    port => S0#state.port,
-    conn_pid => S0#state.conn_pid
-  }}),
-  IsFin = router_grpc:fin_to_bool(Fin),
+  IsFin = echo_grpc:fin_to_bool(Fin),
   case callers_index_get(StreamRef, CI0) of
-    undefined ->
-      ?l_warning(#{text => "gRPC client worker ignoring response data", what => grpc_gun_response, details => #{
-        stream_ref => StreamRef,
-        fin => Fin,
-        host => S0#state.host,
-        port => S0#state.port,
-        conn_pid => S0#state.conn_pid
-      }}),
-      ok;
+    undefined -> ok;
     #caller{pid = Pid} ->
       Pid ! ?grpc_event_data(StreamRef, IsFin, Data)
   end,
@@ -370,23 +296,8 @@ handle_event(info, ?msg_gun_data(ConnPid, StreamRef, Fin, <<0:1/unsigned-integer
 handle_event(info, ?msg_gun_trailers(ConnPid, StreamRef, Trailers), _State, #state{
   conn_pid = ConnPid, callers_index = CI0
 } = S0) ->
-  ?l_warning(#{text => "gRPC client worker got response trailers", what => grpc_gun_trailers, details => #{
-    stream_ref => StreamRef,
-    trailers => Trailers,
-    host => S0#state.host,
-    port => S0#state.port,
-    conn_pid => S0#state.conn_pid
-  }}),
   case callers_index_get(StreamRef, CI0) of
-    undefined ->
-      ?l_warning(#{text => "gRPC client worker ignoring response trailers", what => grpc_gun_trailers, details => #{
-        stream_ref => StreamRef,
-        trailers => Trailers,
-        host => S0#state.host,
-        port => S0#state.port,
-        conn_pid => S0#state.conn_pid
-      }}),
-      ok;
+    undefined -> ok;
     #caller{pid = Pid} ->
       Pid ! ?grpc_event_trailers(StreamRef, maps:from_list(Trailers))
   end,
@@ -402,16 +313,6 @@ handle_event({call, From}, ?msg_is_ready(), _State, _S0) ->
 %% Request call; perform the remote call, update callers index and continue
 handle_event({call, From}, ?msg_grpc_request(CallerPid, Service, Method, Headers), ?fsm_state_on_gun_up(), S0) ->
   StreamRef = gun:post(S0#state.conn_pid, <<"/", Service/binary, "/", Method/binary>>, maps:merge(?default_headers, Headers)),
-  ?l_warning(#{text => "gRPC client worker got request", what => grpc_request, details => #{
-    stream_ref => StreamRef,
-    caller_pid => CallerPid,
-    service => Service,
-    method => Method,
-    headers => Headers,
-    host => S0#state.host,
-    port => S0#state.port,
-    conn_pid => S0#state.conn_pid
-  }}),
   {keep_state, S0#state{
     callers_index = callers_index_set(StreamRef, CallerPid, S0#state.callers_index)
   }, [{reply, From, {ok, StreamRef}}]};
@@ -419,42 +320,23 @@ handle_event({call, From}, ?msg_grpc_request(CallerPid, Service, Method, Headers
 handle_event({call, From}, ?msg_grpc_request(_CallerPid, _Service, _Method, _Headers), _State, _S0) ->
   {keep_state_and_data, [{reply, From, {error, not_ready}}]};
 
-handle_event({call, From}, ?msg_grpc_data(StreamRef, IsFin, Data), _State, #state{conn_pid = ConnPid} = S0) ->
+handle_event({call, From}, ?msg_grpc_data(StreamRef, IsFin, Data), _State, #state{conn_pid = ConnPid} = _S0) ->
   Len = erlang:byte_size(Data),
-  ?l_warning(#{text => "gRPC client worker got request data", what => grpc_data, details => #{
-    stream_ref => StreamRef,
-    data_len => Len,
-    host => S0#state.host,
-    port => S0#state.port,
-    conn_pid => S0#state.conn_pid
-  }}),
   Data1 = <<0:1/unsigned-integer-unit:8, Len:4/unsigned-integer-unit:8, Data:Len/binary-unit:8>>,
-  Fin = router_grpc:bool_to_fin(IsFin),
+  Fin = echo_grpc:bool_to_fin(IsFin),
   ok = gun:data(ConnPid, StreamRef, Fin, Data1),
   {keep_state_and_data, [{reply, From, ok}]};
 
 handle_event({call, From}, ?msg_grpc_terminate(StreamRef), _State, #state{
   conn_pid = ConnPid, callers_index = CI
 } = S0) ->
-  ?l_warning(#{text => "gRPC client worker got request terminate", what => grpc_terminate, details => #{
-    stream_ref => StreamRef,
-    host => S0#state.host,
-    port => S0#state.port,
-    conn_pid => S0#state.conn_pid
-  }}),
   ok = gun:cancel(ConnPid, StreamRef),
   {keep_state, S0#state{
     callers_index = callers_index_remove(StreamRef, CI)
   }, [{reply, From, ok}]};
 
 %% Ignore everything else; including msg_gun_upgrade, msg_gun_push, msg_gun_inform
-handle_event(EventType, EventContent, State, S0) ->
-  ?l_warning(#{text => "gRPC client worker got unexpected event", what => event, details => #{
-    event_type => EventType,
-    event_content => EventContent,
-    fsm_state => State,
-    state => S0
-  }}),
+handle_event(_EventType, _EventContent, _State, _S0) ->
   keep_state_and_data.
 
 
@@ -468,11 +350,6 @@ callers_index_new() -> #callers_index{}.
 
 
 callers_index_set(StreamRef, Pid, #callers_index{stream_ref_index = SRI0, pid_index = PI0} = CI0) ->
-  ?l_warning(#{text => "gRPC client worker got new caller", what => callers_index_set, details => #{
-    stream_ref => StreamRef,
-    caller_pid => Pid,
-    sri => SRI0, pi => PI0
-  }}),
   Caller = #caller{pid = Pid, stream_ref = StreamRef, mon_ref = erlang:monitor(process, Pid)},
   CI0#callers_index{stream_ref_index = SRI0#{StreamRef => Caller}, pid_index = PI0#{Pid => Caller}}.
 
@@ -487,32 +364,18 @@ callers_index_get(Pid, #callers_index{pid_index = PI0}) when is_pid(Pid) ->
 
 
 callers_index_remove(StreamRef, #callers_index{stream_ref_index = SRI0, pid_index = PI0} = CI0) when is_reference(StreamRef) ->
-  ?l_warning(#{text => "gRPC client worker got caller removed by reference", what => callers_index_set, details => #{
-    stream_ref => StreamRef,
-    sri => SRI0, pi => PI0
-  }}),
   case maps:take(StreamRef, SRI0) of
     error -> CI0;
-    {#caller{pid = Pid, stream_ref = StreamRef, mon_ref = MonRef} = Caller, SRI} ->
-      ?l_debug(#{text => "gRPC client worker removing caller index by reference", details => #{
-        caller => Caller, pid_index => PI0, stream_ref_index => SRI0
-      }}),
+    {#caller{pid = Pid, stream_ref = StreamRef, mon_ref = MonRef}, SRI} ->
       true = erlang:demonitor(MonRef, [flush]),
       PI = maps:remove(Pid, PI0),
       CI0#callers_index{stream_ref_index = SRI, pid_index = PI}
   end;
 
 callers_index_remove(Pid, #callers_index{stream_ref_index = SRI0, pid_index = PI0} = CI0) when is_pid(Pid) ->
-  ?l_warning(#{text => "gRPC client worker got caller removed by reference", what => callers_index_set, details => #{
-    caller_pid => Pid,
-    sri => SRI0, pi => PI0
-  }}),
   case maps:take(Pid, PI0) of
     error -> CI0;
-    {#caller{pid = Pid, stream_ref = StreamRef, mon_ref = MonRef} = Caller, PI} ->
-      ?l_debug(#{text => "gRPC client worker cleaning caller index by pid", details => #{
-        caller => Caller, pid_index => PI0, stream_ref_index => SRI0
-      }}),
+    {#caller{pid = Pid, stream_ref = StreamRef, mon_ref = MonRef}, PI} ->
       true = erlang:demonitor(MonRef, [flush]),
       SRI = maps:remove(StreamRef, SRI0),
       CI0#callers_index{stream_ref_index = SRI, pid_index = PI}

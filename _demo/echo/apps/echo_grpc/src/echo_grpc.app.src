@@ -1,0 +1,8 @@
+{application, 'echo_grpc', [
+  {description, "Router gRPC"},
+  {vsn, "0.1.0"},
+  {registered, []},
+  {mod, {'echo_grpc_app', []}},
+  {applications, [kernel, stdlib, echo_log, echo, cowboy, gproc, gun]},
+  {env,[]}
+]}.

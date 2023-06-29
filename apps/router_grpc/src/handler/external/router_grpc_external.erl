@@ -1,6 +1,7 @@
 -module(router_grpc_external).
 
 
+-include_lib("router_log/include/router_log.hrl").
 -include_lib("router_grpc/include/router_grpc.hrl").
 -include_lib("router_grpc/include/router_grpc_service_registry.hrl").
 -include_lib("router_grpc/include/router_grpc_external_context.hrl").
@@ -46,8 +47,14 @@ init(Definitions, #{headers := Headers} = Req) ->
 ) ->
   typr:ok_return(OkRet :: state()).
 
-data(IsFin, Data, #router_grpc_external_state{handler_pid = Pid} = S0) ->
-  ok = router_grpc_external_stream_h:data(Pid, IsFin, Data),
+data(IsFin, Data, #router_grpc_external_state{definition = Definition, handler_pid = HPid} = S0) ->
+  ?l_debug(#{text => "External virtual service call data", what => init, details => #{
+    service => Definition#router_grpc_service_registry_definition_external.fq_service_name,
+    host => Definition#router_grpc_service_registry_definition_external.host,
+    port => Definition#router_grpc_service_registry_definition_external.port,
+    handler_pid => HPid
+  }}),
+  ok = router_grpc_external_stream_h:data(HPid, IsFin, Data),
   {ok, S0}.
 
 
@@ -77,9 +84,15 @@ init_impl(
   [#router_grpc_service_registry_definition_external{type = stateless} | _] = Definitions, Req,
   #router_grpc_external_context{agent_id = undefined, agent_instance = undefined} = Ctx0
 ) ->
-  %% Both agent id and agent instance are not set, that's an error condition
   Definition = lists:nth(quickrand:uniform(length(Definitions)), Definitions),
   {ok, HPid} = router_grpc_external_stream_sup:start_handler(Definition, Req, Ctx0),
+  ?l_debug(#{text => "External virtual service call", what => init, details => #{
+    choices => length(Definitions),
+    service => Definition#router_grpc_service_registry_definition_external.fq_service_name,
+    host => Definition#router_grpc_service_registry_definition_external.host,
+    port => Definition#router_grpc_service_registry_definition_external.port,
+    handler_pid => HPid
+  }}),
   {#router_grpc_external_state{
     handler_pid = HPid, definition = Definition, req = Req, ctx = Ctx0
   }, Definition};
