@@ -1,0 +1,31 @@
+syntax = "proto3";
+
+package lg.service.demo.rtgw;
+
+
+
+/*
+
+*/
+message GetStatsRq {
+  string name = 1;
+}
+
+
+
+/*
+
+*/
+message GetStatsRs {
+  int32 traffic_in_bytes = 1;
+  int32 traffic_out_bytes = 2;
+}
+
+
+
+/*
+
+*/
+service TunnelService {
+  rpc GetStats(GetStatsRq) returns (GetStatsRs);
+}

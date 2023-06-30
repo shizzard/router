@@ -144,7 +144,7 @@ shell: compile
 	$(REBAR) shell
 
 .PHONY: run
-run: $(RELEASE_BIN)
+run: $(RELEASE_BIN) $(RELEASE_BIN_CLI)
 	$(call print_app_env)
 	$(RELEASE_BIN) console
 
@@ -267,7 +267,31 @@ demo-echo-room-stats:
 	--proto lg/service/demo/echo/room.proto \
 	--host localhost \
 	--port $(ROUTER_APP_GRPC_LISTENER_PORT) \
-	cli c GetStats
+	cli c GetStats \
+	--header "x-router-agent-id=$(ROOM_NAME)" \
+	--header "x-router-agent-instance=$(ROOM_NAME)"
+
+.PHONY: demo-rtgw-tunnel-create
+demo-rtgw-tunnel-create:
+	echo '{"name":"$(ROOM_NAME)", "endpoint": {"host": "localhost", "port": 9000}}' | \
+	$(TOOL_EVANS) \
+	--path $(ROUTER_DIR_PROTO) \
+	--proto lg/service/demo/rtgw/gateway.proto \
+	--host localhost \
+	--port $(ROUTER_APP_GRPC_LISTENER_PORT) \
+	cli c SpawnTunnel
+
+.PHONY: demo-rtgw-tunnel-stats
+demo-rtgw-tunnel-stats:
+	echo '{"name":"$(ROOM_NAME)"}' | \
+	$(TOOL_EVANS) \
+	--path $(ROUTER_DIR_PROTO) \
+	--proto lg/service/demo/rtgw/tunnel.proto \
+	--host localhost \
+	--port $(ROUTER_APP_GRPC_LISTENER_PORT) \
+	cli c GetStats \
+	--header "x-router-agent-id=$(ROOM_NAME)" \
+	--header "x-router-agent-instance=$(ROOM_NAME)"
 
 ROUTER_DIR_DEMO_ECHO := $(ROUTER_DIR_DEMO)/echo
 demo-echo-%: all

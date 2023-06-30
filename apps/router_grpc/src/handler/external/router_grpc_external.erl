@@ -78,24 +78,28 @@ data(IsFin, Data, #router_grpc_external_state{definition = Definition, handler_p
   Req :: cowboy_req:req(),
   Ctx :: router_grpc_external_context:t()
 ) ->
-  Ret :: {HS :: state(), Definition :: router_grpc:definition_external()}.
+  typr:generic_return(
+    OkRet :: {HS :: state(), Definition :: router_grpc:definition_external()},
+    ErrorRet :: agent_spec_missing | term()
+  ).
 
 init_impl(
   [#router_grpc_service_registry_definition_external{type = stateless} | _] = Definitions, Req,
-  #router_grpc_external_context{agent_id = undefined, agent_instance = undefined} = Ctx0
+  #router_grpc_external_context{agent_id = _, agent_instance = _} = Ctx0
 ) ->
+  %% Stateless service call
   Definition = lists:nth(quickrand:uniform(length(Definitions)), Definitions),
   {ok, HPid} = router_grpc_external_stream_sup:start_handler(Definition, Req, Ctx0),
-  ?l_debug(#{text => "External virtual service call", what => init, details => #{
-    choices => length(Definitions),
-    service => Definition#router_grpc_service_registry_definition_external.fq_service_name,
-    host => Definition#router_grpc_service_registry_definition_external.host,
-    port => Definition#router_grpc_service_registry_definition_external.port,
-    handler_pid => HPid
-  }}),
-  {#router_grpc_external_state{
+  {ok, {#router_grpc_external_state{
     handler_pid = HPid, definition = Definition, req = Req, ctx = Ctx0
-  }, Definition};
+  }, Definition}};
+
+init_impl(
+  [#router_grpc_service_registry_definition_external{type = stateful} | _] = _Definitions, _Req,
+  #router_grpc_external_context{agent_id = undefined, agent_instance = undefined} = _Ctx0
+) ->
+  %% Stateful service call with no agent info specified
+  {error, agent_spec_missing};
 
 init_impl(
   [#router_grpc_service_registry_definition_external{type = stateful} = AnyDefinition | _] = Definitions, Req,
@@ -112,9 +116,9 @@ init_impl(
       {AgentInstance, Definition} = lists:nth(quickrand:uniform(length(DefinitionsPL)), DefinitionsPL),
       Ctx1 = Ctx0#router_grpc_external_context{agent_instance = AgentInstance},
       {ok, HPid} = router_grpc_external_stream_sup:start_handler(Definition, Req, Ctx1),
-      {#router_grpc_external_state{
+      {ok, {#router_grpc_external_state{
         handler_pid = HPid, definition = Definition, ctx = Ctx1, req = Req
-      }, Definition};
+      }, Definition}};
     {error, undefined} ->
       %% No matching agent found
       %% Choose a random stateful virtual service instance and proceed with generated agent instance
@@ -122,9 +126,9 @@ init_impl(
       AgentInstance = router_grpc:gen_agent_instance(),
       Ctx1 = Ctx0#router_grpc_external_context{agent_instance = AgentInstance},
       {ok, HPid} = router_grpc_external_stream_sup:start_handler(Definition, Req, Ctx1),
-      {#router_grpc_external_state{
+      {ok, {#router_grpc_external_state{
         handler_pid = HPid, definition = Definition, ctx = Ctx1, req = Req
-      }, Definition}
+      }, Definition}}
   end;
 
 init_impl(
@@ -140,15 +144,15 @@ init_impl(
       %% Agent found (e.g. both agent id and agent instance matched)
       %% Proceed with the chosen agent
       {ok, HPid} = router_grpc_external_stream_sup:start_handler(Definition, Req, Ctx0),
-      {#router_grpc_external_state{
+      {ok, {#router_grpc_external_state{
         handler_pid = HPid, definition = Definition, ctx = Ctx0, req = Req
-      }, Definition};
+      }, Definition}};
     {error, undefined} ->
       %% No matching agent found
       %% Choose a random stateful virtual service and proceed with the specified agent id and instance
       Definition = lists:nth(quickrand:uniform(length(Definitions)), Definitions),
       {ok, HPid} = router_grpc_external_stream_sup:start_handler(Definition, Req, Ctx0),
-      {#router_grpc_external_state{
+      {ok, {#router_grpc_external_state{
         handler_pid = HPid, definition = Definition, ctx = Ctx0, req = Req
-      }, Definition}
+      }, Definition}}
   end.

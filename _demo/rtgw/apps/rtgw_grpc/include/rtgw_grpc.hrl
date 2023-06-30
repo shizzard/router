@@ -1,9 +1,9 @@
 %% Router-specific headers
 
--define(router_grpc_header_prefix, "x-router-").
--define(router_grpc_header_agent_id, <<?router_grpc_header_prefix, "agent-id">>).
--define(router_grpc_header_agent_instance, <<?router_grpc_header_prefix, "agent-instance">>).
--define(router_grpc_header_request_id, <<?router_grpc_header_prefix, "request-id">>).
+-define(rtgw_grpc_header_prefix, "x-rtgw-").
+-define(rtgw_grpc_header_agent_id, <<?rtgw_grpc_header_prefix, "agent-id">>).
+-define(rtgw_grpc_header_agent_instance, <<?rtgw_grpc_header_prefix, "agent-instance">>).
+-define(rtgw_grpc_header_request_id, <<?rtgw_grpc_header_prefix, "request-id">>).
 
 %% Headers
 
@@ -44,7 +44,6 @@
 -define(grpc_message_unknown, <<"Unknown error">>).
 -define(grpc_message_invalid_argument, <<"Invalid argument">>).
 -define(grpc_message_invalid_argument_payload, <<"Invalid payload">>).
--define(grpc_message_invalid_argument_agent_spec_missing, <<"Stateful Virtual Service calls require at least x-router-agent-id header to be set">>).
 -define(grpc_message_deadline_exceeded, <<"Deadline exceeded">>).
 -define(grpc_message_not_found, <<"Entity not found">>).
 -define(grpc_message_already_exists, <<"Entity already exists">>).
