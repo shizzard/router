@@ -2,6 +2,7 @@
 
 -include_lib("echo_grpc/include/echo_grpc.hrl").
 -include_lib("echo/include/lobby_definitions.hrl").
+-include_lib("echo/include/gateway_definitions.hrl").
 -include_lib("echo_log/include/echo_log.hrl").
 
 -export([init/2]).
@@ -55,14 +56,41 @@ spawn_room(#'lg.service.demo.echo.SpawnRoomRq'{name = Name}, S0) ->
 
 
 spawn_room_impl(Name, S0) ->
-  Secret = <<"secret">>,
+  spawn_room_impl_spawn_client(Name, S0).
+
+spawn_room_impl_spawn_client(Name, S0) ->
+  {ok, Client} = echo_grpc_client_unary:start_link(),
+  spawn_room_impl_send_request(Name, Client, S0).
+
+spawn_room_impl_send_request(Name, Client, S0) ->
   {ok, RanchPort} = echo_config:get(echo, [room, listener, port]),
+  Pdu = #'lg.service.demo.rtgw.SpawnTunnelRq'{
+    endpoint = #'lg.core.network.Endpoint'{host = <<"localhost">>, port = RanchPort},
+    name = Name
+  },
+  case echo_grpc_client_unary:request(
+    Client, <<"lg.service.demo.rtgw.GatewayService">>, <<"SpawnTunnel">>, #{}, gateway_definitions, Pdu, 'lg.service.demo.rtgw.SpawnTunnelRs'
+  ) of
+    {ok, {Status, Headers, undefined, undefined}} ->
+      ?l_debug(#{text => "Failed to create tunnel", result => error, details => #{
+        status => Status, headers => Headers
+      }}),
+      {error, {grpc_error, ?grpc_code_internal, ?grpc_message_internal, #{}}, S0};
+    {ok, {_Status, _Headers, #'lg.service.demo.rtgw.SpawnTunnelRs'{
+      endpoint = #'lg.core.network.Endpoint'{host = RtgwHost, port = RtgwPort},
+      name = Name,
+      secret = Secret
+    }, _Trailers}} ->
+      spawn_room_impl_reply(Name, Secret, RtgwHost, RtgwPort, S0)
+  end.
+
+spawn_room_impl_reply(Name, Secret, RtgwHost, RtgwPort, S0) ->
   case echo_room_sup:start_room(Name, Secret) of
     {ok, _Pid} ->
       {ok, {reply_fin, #'lg.service.demo.echo.SpawnRoomRs'{
         endpoint = #'lg.core.network.Endpoint'{
-          host = <<"localhost">>,
-          port = RanchPort
+          host = RtgwHost,
+          port = RtgwPort
         },
         name = Name,
         secret = Secret

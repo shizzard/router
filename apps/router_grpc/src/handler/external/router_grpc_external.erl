@@ -26,7 +26,10 @@
   Definitions :: [router_grpc:definition_external()],
   Req :: cowboy_req:req()
 ) ->
-  Ret :: {HS :: state(), Definition :: router_grpc:definition_external()}.
+  typr:generic_return(
+    OkRet :: {HS :: state(), Definition :: router_grpc:definition_external()},
+    ErrorRet :: agent_spec_missing
+  ).
 
 init(Definitions, #{headers := Headers} = Req) ->
   AgentId = maps:get(?router_grpc_header_agent_id, Headers, undefined),

@@ -181,10 +181,10 @@ init_external(StreamId, Req, Definitions) ->
     {ok, {HS0, Definition}} ->
       wait_commands(#state{stream_id = StreamId, req = Req, handler_state = HS0, definition = Definition});
     {error, agent_spec_missing} ->
-      error_commands(?grpc_code_invalid_argument, ?grpc_message_invalid_argument_agent_spec_missing, #state{});
-    {error, Reason} ->
-      ?l_error(#{text => "Failed to init external stateful service call", what => init, details => #{reason => Reason}}),
-      error_commands(?grpc_code_internal, ?grpc_message_internal, #state{})
+      error_commands(?grpc_code_invalid_argument, ?grpc_message_invalid_argument_agent_spec_missing, #state{})
+    % {error, Reason} ->
+    %   ?l_error(#{text => "Failed to init external stateful service call", what => init, details => #{reason => Reason}}),
+    %   error_commands(?grpc_code_internal, ?grpc_message_internal, #state{})
   end.
 
 

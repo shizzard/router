@@ -36,4 +36,5 @@
   --output json \
   --enrich \
   > ${response-file}
+  [invoke check-ok]
 [endmacro]
