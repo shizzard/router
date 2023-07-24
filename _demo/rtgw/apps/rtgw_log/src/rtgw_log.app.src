@@ -1,7 +1,0 @@
-{application, 'rtgw_log', [
-  {description, "Log facilities for rtgw"},
-  {vsn, "0.1.0"},
-  {registered, []},
-  {applications, [kernel, stdlib, uuid]},
-  {env,[]}
-]}.

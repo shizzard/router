@@ -1,8 +1,0 @@
-{application, 'rtgw_grpc', [
-  {description, "Router gRPC"},
-  {vsn, "0.1.0"},
-  {registered, []},
-  {mod, {'rtgw_grpc_app', []}},
-  {applications, [kernel, stdlib, rtgw_log, rtgw, cowboy, gproc, gun]},
-  {env,[]}
-]}.

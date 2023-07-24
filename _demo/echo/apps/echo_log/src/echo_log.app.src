@@ -1,7 +1,0 @@
-{application, 'echo_log', [
-  {description, "Log facilities for echo"},
-  {vsn, "0.1.0"},
-  {registered, []},
-  {applications, [kernel, stdlib, uuid]},
-  {env,[]}
-]}.

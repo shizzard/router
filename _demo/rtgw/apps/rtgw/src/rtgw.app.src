@@ -1,8 +1,0 @@
-{application, 'rtgw', [
-  {description, "gRPC microservices rtgw application"},
-  {vsn, "0.1.0"},
-  {registered, []},
-  {mod, {'rtgw_app', []}},
-  {applications, [kernel, stdlib, gproc, rtgw_log]},
-  {env,[]}
-]}.
